@@ -1,0 +1,51 @@
+# Only Todo
+
+基于 Tauri 2 + Rust + Vue 3 的本地优先桌面任务助手。
+
+## 文档
+
+- [TODO 项目需求说明.md](TODO%20项目需求说明.md) — 项目入口
+- [doc/产品需求.md](doc/产品需求.md) — 产品规格
+- [doc/技术设计.md](doc/技术设计.md) — 技术设计
+- [doc/项目进度.md](doc/项目进度.md) — 开发进度
+
+## 运行环境
+
+本项目使用 [mise](https://mise.jdx.dev/) 管理工具链，版本见 [mise.toml](mise.toml)。
+
+| 工具 | 版本 |
+|------|------|
+| Node.js | 24 |
+| Rust | stable |
+
+系统依赖（Windows）：Visual Studio Build Tools（C++）、WebView2
+
+### 首次 setup
+
+```bash
+mise trust
+mise install
+mise run install
+```
+
+### 常用命令
+
+```bash
+mise run dev      # 开发
+mise run check    # Rust 编译检查
+mise run build    # 构建生产包
+```
+
+### 约定
+
+- 不要依赖系统全局 Node/Rust，进入项目目录后须先 `mise install`
+- 脚本或未激活 mise 的 shell 中使用：`mise exec -- npm run tauri dev`
+
+## 项目结构
+
+```
+src/           Vue 3 前端（目录说明见 doc/技术设计.md §1.6）
+src-tauri/     Rust 后端（分层模块）
+doc/           需求与设计文档
+mise.toml      工具链与任务入口
+```

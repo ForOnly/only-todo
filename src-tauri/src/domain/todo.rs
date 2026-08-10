@@ -1,0 +1,115 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use super::priority::Priority;
+use super::status::TodoStatus;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Todo {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: TodoStatus,
+    pub priority: Priority,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoDto {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: TodoStatus,
+    pub priority: Priority,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+    pub deleted_at: Option<String>,
+}
+
+impl From<Todo> for TodoDto {
+    fn from(todo: Todo) -> Self {
+        Self {
+            id: todo.id,
+            title: todo.title,
+            description: todo.description,
+            status: todo.status,
+            priority: todo.priority,
+            created_at: todo.created_at.to_rfc3339(),
+            updated_at: todo.updated_at.to_rfc3339(),
+            completed_at: todo.completed_at.map(|value| value.to_rfc3339()),
+            deleted_at: todo.deleted_at.map(|value| value.to_rfc3339()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTodoDto {
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub priority: Option<Priority>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateTodoDto {
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub priority: Option<Priority>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListTodoQuery {
+    #[serde(default)]
+    pub status: Option<Vec<TodoStatus>>,
+    #[serde(default)]
+    pub priority: Option<Vec<Priority>>,
+    #[serde(default)]
+    pub keyword: Option<String>,
+    #[serde(default = "default_sort_by")]
+    pub sort_by: String,
+    #[serde(default = "default_sort_order")]
+    pub sort_order: String,
+    #[serde(default = "default_page")]
+    pub page: u32,
+    #[serde(default = "default_page_size")]
+    pub page_size: u32,
+}
+
+fn default_sort_by() -> String {
+    "priority".into()
+}
+
+fn default_sort_order() -> String {
+    "desc".into()
+}
+
+fn default_page() -> u32 {
+    1
+}
+
+fn default_page_size() -> u32 {
+    50
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaginatedResponse<T> {
+    pub items: Vec<T>,
+    pub total: u64,
+    pub page: u32,
+    pub page_size: u32,
+}
