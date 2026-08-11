@@ -5,7 +5,7 @@ import {
   STATUS_LABELS,
   type TodoDto,
 } from "@/api/types";
-import { formatDate } from "@/utils/date";
+import { formatDate, formatDueDate } from "@/utils/date";
 
 defineProps<{
   todos: TodoDto[];
@@ -40,6 +40,8 @@ const emit = defineEmits<{
         </div>
         <div class="meta">
           <span>{{ STATUS_LABELS[todo.status] }}</span>
+          <span v-if="todo.dueDate">截止 {{ formatDueDate(todo.dueDate) }}</span>
+          <span v-if="todo.tags.length">{{ todo.tags.join(", ") }}</span>
           <span>{{ formatDate(todo.updatedAt) }}</span>
         </div>
       </li>

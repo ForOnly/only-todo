@@ -25,3 +25,8 @@ export async function deleteReminder(id: string): Promise<void> {
 export async function listReminders(todoId: string): Promise<ReminderDto[]> {
   return invoke("list_reminders", { todoId });
 }
+
+/** Tauri Command: snooze_reminder */
+export async function snoozeReminder(id: string, minutes: number): Promise<ReminderDto> {
+  return invoke("snooze_reminder", { id, minutes });
+}

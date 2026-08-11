@@ -16,10 +16,22 @@
         "title": "Only Todo",
         "width": 1024,
         "height": 768
+      },
+      {
+        "label": "float",
+        "title": "Only Todo Float",
+        "width": 320,
+        "height": 480,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost blob: data:; font-src 'self'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {

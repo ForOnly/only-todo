@@ -12,6 +12,8 @@ pub struct Todo {
     pub description: String,
     pub status: TodoStatus,
     pub priority: Priority,
+    pub due_date: Option<DateTime<Utc>>,
+    pub tags: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -26,6 +28,8 @@ pub struct TodoDto {
     pub description: String,
     pub status: TodoStatus,
     pub priority: Priority,
+    pub due_date: Option<String>,
+    pub tags: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
@@ -40,6 +44,8 @@ impl From<Todo> for TodoDto {
             description: todo.description,
             status: todo.status,
             priority: todo.priority,
+            due_date: todo.due_date.map(|value| value.to_rfc3339()),
+            tags: todo.tags,
             created_at: todo.created_at.to_rfc3339(),
             updated_at: todo.updated_at.to_rfc3339(),
             completed_at: todo.completed_at.map(|value| value.to_rfc3339()),
@@ -56,6 +62,10 @@ pub struct CreateTodoDto {
     pub description: Option<String>,
     #[serde(default)]
     pub priority: Option<Priority>,
+    #[serde(default)]
+    pub due_date: Option<String>,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -68,6 +78,10 @@ pub struct UpdateTodoDto {
     pub description: Option<String>,
     #[serde(default)]
     pub priority: Option<Priority>,
+    #[serde(default)]
+    pub due_date: Option<Option<String>>,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -78,7 +92,15 @@ pub struct ListTodoQuery {
     #[serde(default)]
     pub priority: Option<Vec<Priority>>,
     #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    #[serde(default)]
     pub keyword: Option<String>,
+    #[serde(default)]
+    pub due_date_before: Option<String>,
+    #[serde(default)]
+    pub due_date_after: Option<String>,
+    #[serde(default)]
+    pub include_archived: Option<bool>,
     #[serde(default = "default_sort_by")]
     pub sort_by: String,
     #[serde(default = "default_sort_order")]

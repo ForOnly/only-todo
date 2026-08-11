@@ -53,3 +53,8 @@ export async function transitionTodo(
 export async function showMainWindow(todoId?: string): Promise<void> {
   return invoke("show_main_window", { todoId: todoId ?? null });
 }
+
+/** Tauri Command: list_all_tags */
+export async function listAllTags(): Promise<string[]> {
+  return invoke("list_all_tags");
+}

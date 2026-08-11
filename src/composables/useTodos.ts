@@ -1,18 +1,16 @@
-/**
- * 任务列表状态：筛选、分页、CRUD 编排。
- * 通过 api/todos.ts 调用 Tauri Command。
- */
 import { ref, type Ref } from "vue";
 
 import * as todoApi from "@/api/todos";
 import type {
   CreateTodoDto,
+  DueDateFilter,
   ListTodoQuery,
   Priority,
   TodoDto,
   TodoStatus,
 } from "@/api/types";
 import { formatErrorMessage } from "@/utils/error";
+import { dueDateRangeForFilter } from "@/utils/date";
 
 export interface UseTodosReturn {
   todos: Ref<TodoDto[]>;
@@ -24,12 +22,16 @@ export interface UseTodosReturn {
   keyword: Ref<string>;
   selectedStatuses: Ref<TodoStatus[]>;
   selectedPriorities: Ref<Priority[]>;
+  selectedTags: Ref<string[]>;
+  dueDateFilter: Ref<DueDateFilter>;
   selectedId: Ref<string | null>;
   fetchTodos: () => Promise<void>;
   createTodo: (dto: CreateTodoDto) => Promise<TodoDto>;
   selectTodo: (id: string | null) => Promise<void>;
   toggleStatusFilter: (status: TodoStatus) => void;
   togglePriorityFilter: (priority: Priority) => void;
+  toggleTagFilter: (tag: string) => void;
+  setDueDateFilter: (filter: DueDateFilter) => void;
   search: () => Promise<void>;
   goToPage: (nextPage: number) => Promise<void>;
 }
@@ -44,9 +46,13 @@ export function useTodos(): UseTodosReturn {
   const keyword = ref("");
   const selectedStatuses = ref<TodoStatus[]>([]);
   const selectedPriorities = ref<Priority[]>([]);
+  const selectedTags = ref<string[]>([]);
+  const dueDateFilter = ref<DueDateFilter>("all");
   const selectedId = ref<string | null>(null);
+  let listGen = 0;
 
   async function fetchTodos(): Promise<void> {
+    const gen = ++listGen;
     loading.value = true;
     error.value = null;
     try {
@@ -55,25 +61,41 @@ export function useTodos(): UseTodosReturn {
         pageSize: pageSize.value,
         sortBy: "priority",
         sortOrder: "desc",
+        includeArchived: false,
       };
       if (keyword.value.trim()) {
         query.keyword = keyword.value.trim();
       }
       if (selectedStatuses.value.length > 0) {
         query.status = [...selectedStatuses.value];
+        query.includeArchived = selectedStatuses.value.includes("Archived");
+      } else if (dueDateFilter.value === "overdue" || dueDateFilter.value === "today") {
+        // 与角标计数一致：仅活跃 Todo/Doing
+        query.status = ["Todo", "Doing"];
       }
       if (selectedPriorities.value.length > 0) {
         query.priority = [...selectedPriorities.value];
       }
+      if (selectedTags.value.length > 0) {
+        query.tags = [...selectedTags.value];
+      }
+      const dueRange = dueDateRangeForFilter(dueDateFilter.value);
+      if (dueRange.after) query.dueDateAfter = dueRange.after;
+      if (dueRange.before) query.dueDateBefore = dueRange.before;
+
       const result = await todoApi.listTodos(query);
+      if (gen !== listGen) return;
       todos.value = result.items;
       total.value = result.total;
       page.value = result.page;
       pageSize.value = result.pageSize;
     } catch (err) {
+      if (gen !== listGen) return;
       error.value = formatErrorMessage(err);
     } finally {
-      loading.value = false;
+      if (gen === listGen) {
+        loading.value = false;
+      }
     }
   }
 
@@ -110,6 +132,23 @@ export function useTodos(): UseTodosReturn {
     void fetchTodos();
   }
 
+  function toggleTagFilter(tag: string): void {
+    const index = selectedTags.value.indexOf(tag);
+    if (index >= 0) {
+      selectedTags.value.splice(index, 1);
+    } else {
+      selectedTags.value.push(tag);
+    }
+    page.value = 1;
+    void fetchTodos();
+  }
+
+  function setDueDateFilter(filter: DueDateFilter): void {
+    dueDateFilter.value = filter;
+    page.value = 1;
+    void fetchTodos();
+  }
+
   async function search(): Promise<void> {
     page.value = 1;
     await fetchTodos();
@@ -133,12 +172,16 @@ export function useTodos(): UseTodosReturn {
     keyword,
     selectedStatuses,
     selectedPriorities,
+    selectedTags,
+    dueDateFilter,
     selectedId,
     fetchTodos,
     createTodo,
     selectTodo,
     toggleStatusFilter,
     togglePriorityFilter,
+    toggleTagFilter,
+    setDueDateFilter,
     search,
     goToPage,
   };

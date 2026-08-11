@@ -4,6 +4,7 @@ import {
   PRIORITY_OPTIONS,
   STATUS_LABELS,
   STATUS_OPTIONS,
+  type DueDateFilter,
   type Priority,
   type TodoStatus,
 } from "@/api/types";
@@ -11,13 +12,24 @@ import {
 defineProps<{
   selectedStatuses: TodoStatus[];
   selectedPriorities: Priority[];
+  selectedTags: string[];
+  allTags: string[];
+  dueDateFilter: DueDateFilter;
   collapsed: boolean;
 }>();
 
 const emit = defineEmits<{
   toggleStatus: [status: TodoStatus];
   togglePriority: [priority: Priority];
+  toggleTag: [tag: string];
+  setDueDateFilter: [filter: DueDateFilter];
 }>();
+
+const dueDateOptions: { value: DueDateFilter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "today", label: "今日到期" },
+  { value: "overdue", label: "已逾期" },
+];
 </script>
 
 <template>
@@ -34,6 +46,7 @@ const emit = defineEmits<{
           {{ STATUS_LABELS[status] }}
         </label>
       </section>
+
       <section>
         <h3>优先级</h3>
         <label
@@ -47,6 +60,35 @@ const emit = defineEmits<{
             @change="emit('togglePriority', priority)"
           />
           {{ PRIORITY_LABELS[priority] }}
+        </label>
+      </section>
+
+      <section>
+        <h3>截止日期</h3>
+        <label
+          v-for="option in dueDateOptions"
+          :key="option.value"
+          class="filter-item"
+        >
+          <input
+            type="radio"
+            name="due-date-filter"
+            :checked="dueDateFilter === option.value"
+            @change="emit('setDueDateFilter', option.value)"
+          />
+          {{ option.label }}
+        </label>
+      </section>
+
+      <section v-if="allTags.length > 0">
+        <h3>标签</h3>
+        <label v-for="tag in allTags" :key="tag" class="filter-item">
+          <input
+            type="checkbox"
+            :checked="selectedTags.includes(tag)"
+            @change="emit('toggleTag', tag)"
+          />
+          {{ tag }}
         </label>
       </section>
     </div>

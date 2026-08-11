@@ -44,6 +44,11 @@ pub fn list_todos(
 }
 
 #[tauri::command]
+pub fn list_all_tags(state: State<AppState>) -> Result<Vec<String>, AppError> {
+    TodoService::list_all_tags(&state.db)
+}
+
+#[tauri::command]
 pub fn transition_todo(
     state: State<AppState>,
     id: String,

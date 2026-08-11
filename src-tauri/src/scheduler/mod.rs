@@ -32,11 +32,13 @@ async fn run_scheduler(app: AppHandle) {
             None => continue,
         };
 
+        // 启动 tick 只跑 catch-up，避免同 tick 再跑普通扫描抵消 24h 策略
         if !startup_catchup_done {
             if let Err(error) = process_due_reminders(&app, &state.db, true).await {
                 tracing::error!("startup reminder catchup failed: {error}");
             }
             startup_catchup_done = true;
+            continue;
         }
 
         if let Err(error) = process_due_reminders(&app, &state.db, false).await {
@@ -51,20 +53,23 @@ async fn process_due_reminders(
     startup_catchup: bool,
 ) -> Result<(), crate::errors::AppError> {
     let notification_enabled = SettingsService::is_notification_enabled(db)?;
-    if !notification_enabled {
-        return Ok(());
-    }
-
     let now = Utc::now();
     let due_items = ReminderRepository::find_due(db, &now)?;
 
     for item in due_items {
+        // 软删任务：只推进时间，不发通知
         if item.todo_deleted {
             ReminderRepository::advance(db, &item.reminder)?;
             continue;
         }
 
-        // 启动时仅补发 24 小时内错过的提醒
+        // 关闭通知时仍推进，避免重新打开后积压洪水
+        if !notification_enabled {
+            ReminderRepository::advance(db, &item.reminder)?;
+            continue;
+        }
+
+        // 启动时仅补发 24 小时内错过的提醒；更早的只跳到未来
         if startup_catchup {
             let cutoff = now - ChronoDuration::hours(24);
             if item.reminder.next_trigger_at < cutoff {

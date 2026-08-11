@@ -35,3 +35,12 @@ pub fn list_reminders(
 ) -> Result<Vec<ReminderDto>, AppError> {
     ReminderService::list(&state.db, &todo_id)
 }
+
+#[tauri::command]
+pub fn snooze_reminder(
+    state: State<AppState>,
+    id: String,
+    minutes: i64,
+) -> Result<ReminderDto, AppError> {
+    ReminderService::snooze(&state.db, &id, minutes)
+}

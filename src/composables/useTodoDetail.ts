@@ -6,7 +6,8 @@ import { ref, watch, type Ref } from "vue";
 
 import * as reminderApi from "@/api/reminders";
 import * as todoApi from "@/api/todos";
-import type { ReminderDto, TodoDto, TodoStatus } from "@/api/types";
+import type { ReminderDto, RepeatType, TodoDto, TodoStatus } from "@/api/types";
+import { fromLocalDatetimeInput, toLocalDatetimeInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 
 export interface UseRemindersReturn {
@@ -14,8 +15,9 @@ export interface UseRemindersReturn {
   loading: Ref<boolean>;
   error: Ref<string | null>;
   fetchReminders: (todoId: string) => Promise<void>;
-  addReminder: (todoId: string, localDatetime: string) => Promise<void>;
+  addReminder: (todoId: string, localDatetime: string, repeatType?: RepeatType) => Promise<void>;
   removeReminder: (id: string, todoId: string) => Promise<void>;
+  snoozeReminder: (id: string, todoId: string, minutes: number) => Promise<void>;
 }
 
 export interface UseTodoDetailReturn {
@@ -23,45 +25,57 @@ export interface UseTodoDetailReturn {
   editTitle: Ref<string>;
   editDescription: Ref<string>;
   editPriority: Ref<TodoDto["priority"]>;
+  editDueDate: Ref<string>;
+  editTags: Ref<string>;
   saving: Ref<boolean>;
   error: Ref<string | null>;
   save: () => Promise<boolean>;
-  toggleComplete: () => Promise<void>;
-  remove: () => Promise<void>;
+  transitionTo: (status: TodoStatus) => Promise<void>;
+  remove: () => Promise<boolean>;
 }
 
 export function useReminders(selectedId: Ref<string | null>): UseRemindersReturn {
   const reminders = ref<ReminderDto[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  let reminderGen = 0;
 
   async function fetchReminders(todoId: string): Promise<void> {
+    const gen = ++reminderGen;
     loading.value = true;
     error.value = null;
     try {
-      reminders.value = await reminderApi.listReminders(todoId);
+      const list = await reminderApi.listReminders(todoId);
+      if (gen !== reminderGen) return;
+      reminders.value = list;
     } catch (err) {
+      if (gen !== reminderGen) return;
       error.value = formatErrorMessage(err);
       reminders.value = [];
     } finally {
-      loading.value = false;
+      if (gen === reminderGen) {
+        loading.value = false;
+      }
     }
   }
 
   watch(selectedId, (id) => {
+    reminderGen += 1;
     if (id) {
       void fetchReminders(id);
     } else {
       reminders.value = [];
+      loading.value = false;
     }
   });
 
   async function addReminder(
     todoId: string,
     localDatetime: string,
+    repeatType: RepeatType = "none",
   ): Promise<void> {
     const remindAt = new Date(localDatetime).toISOString();
-    await reminderApi.createReminder({ todoId, remindAt });
+    await reminderApi.createReminder({ todoId, remindAt, repeatType });
     await fetchReminders(todoId);
   }
 
@@ -70,7 +84,24 @@ export function useReminders(selectedId: Ref<string | null>): UseRemindersReturn
     await fetchReminders(todoId);
   }
 
-  return { reminders, loading, error, fetchReminders, addReminder, removeReminder };
+  async function snoozeReminder(
+    id: string,
+    todoId: string,
+    minutes: number,
+  ): Promise<void> {
+    await reminderApi.snoozeReminder(id, minutes);
+    await fetchReminders(todoId);
+  }
+
+  return {
+    reminders,
+    loading,
+    error,
+    fetchReminders,
+    addReminder,
+    removeReminder,
+    snoozeReminder,
+  };
 }
 
 export function useTodoDetail(
@@ -81,22 +112,30 @@ export function useTodoDetail(
   const editTitle = ref("");
   const editDescription = ref("");
   const editPriority = ref<TodoDto["priority"]>("Medium");
+  const editDueDate = ref("");
+  const editTags = ref("");
   const saving = ref(false);
   const error = ref<string | null>(null);
+  let loadGen = 0;
 
   watch(selectedId, async (id) => {
+    const gen = ++loadGen;
     if (!id) {
       detail.value = null;
       return;
     }
     try {
       const todo = await todoApi.getTodo(id);
+      if (gen !== loadGen) return;
       detail.value = todo;
       editTitle.value = todo.title;
       editDescription.value = todo.description;
       editPriority.value = todo.priority;
+      editDueDate.value = toLocalDatetimeInput(todo.dueDate);
+      editTags.value = todo.tags.join(", ");
       error.value = null;
     } catch (err) {
+      if (gen !== loadGen) return;
       error.value = formatErrorMessage(err);
       detail.value = null;
     }
@@ -107,11 +146,17 @@ export function useTodoDetail(
     saving.value = true;
     error.value = null;
     try {
+      const tags = editTags.value
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
       detail.value = await todoApi.updateTodo({
         id: selectedId.value,
         title: editTitle.value,
         description: editDescription.value,
         priority: editPriority.value,
+        dueDate: fromLocalDatetimeInput(editDueDate.value),
+        tags,
       });
       await onUpdated();
       return true;
@@ -123,20 +168,29 @@ export function useTodoDetail(
     }
   }
 
-  async function toggleComplete(): Promise<void> {
+  async function transitionTo(status: TodoStatus): Promise<void> {
     if (!detail.value) return;
-    const next: TodoStatus = detail.value.status === "Done" ? "Todo" : "Done";
-    detail.value = await todoApi.transitionTodo(detail.value.id, next);
-    editTitle.value = detail.value.title;
-    await onUpdated();
+    try {
+      detail.value = await todoApi.transitionTodo(detail.value.id, status);
+      editTitle.value = detail.value.title;
+      await onUpdated();
+    } catch (err) {
+      error.value = formatErrorMessage(err);
+    }
   }
 
-  async function remove(): Promise<void> {
-    if (!selectedId.value) return;
-    if (!window.confirm("确定删除此任务？删除后将从列表中隐藏。")) return;
-    await todoApi.deleteTodo(selectedId.value);
-    selectedId.value = null;
-    await onUpdated();
+  async function remove(): Promise<boolean> {
+    if (!selectedId.value) return false;
+    if (!window.confirm("确定删除此任务？删除后将从列表中隐藏。")) return false;
+    try {
+      await todoApi.deleteTodo(selectedId.value);
+      selectedId.value = null;
+      await onUpdated();
+      return true;
+    } catch (err) {
+      error.value = formatErrorMessage(err);
+      return false;
+    }
   }
 
   return {
@@ -144,10 +198,12 @@ export function useTodoDetail(
     editTitle,
     editDescription,
     editPriority,
+    editDueDate,
+    editTags,
     saving,
     error,
     save,
-    toggleComplete,
+    transitionTo,
     remove,
   };
 }

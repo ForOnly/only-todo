@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
-import type { CreateTodoDto } from "@/api/types";
+import type { CreateTodoDto, DueDateFilter } from "@/api/types";
+import { listAllTags } from "@/api/todos";
 import { getSettings, updateSettings } from "@/api/settings";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
@@ -31,12 +32,16 @@ const {
   keyword,
   selectedStatuses,
   selectedPriorities,
+  selectedTags,
+  dueDateFilter,
   selectedId,
   fetchTodos,
   createTodo,
   selectTodo,
   toggleStatusFilter,
   togglePriorityFilter,
+  toggleTagFilter,
+  setDueDateFilter,
   search,
   goToPage,
 } = useTodos();
@@ -47,6 +52,7 @@ const {
   error: remindersError,
   addReminder,
   removeReminder,
+  snoozeReminder,
 } = useReminders(selectedId);
 
 const {
@@ -54,16 +60,24 @@ const {
   editTitle,
   editDescription,
   editPriority,
+  editDueDate,
+  editTags,
   saving,
   error: detailError,
   save,
-  toggleComplete,
+  transitionTo,
   remove,
 } = useTodoDetail(selectedId, fetchTodos);
 
 const settingsOpen = ref(false);
 const createOpen = ref(false);
 const notificationEnabled = ref(true);
+const floatAlwaysOnTop = ref(true);
+const floatVisibleCount = ref(5);
+const floatAutoShow = ref(true);
+const floatDefaultMode = ref<import("@/api/types").FloatDefaultMode>("ball");
+const autostartEnabled = ref(false);
+const allTags = ref<string[]>([]);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 
@@ -74,6 +88,7 @@ const detailOpen = computed(() => selectedId.value !== null);
 
 onMounted(async () => {
   await fetchTodos();
+  await loadTags();
 
   if (filterPinned.value) {
     filterCollapsed.value = false;
@@ -82,6 +97,11 @@ onMounted(async () => {
   try {
     const settings = await getSettings();
     notificationEnabled.value = settings.notificationEnabled;
+    floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
+    floatVisibleCount.value = settings.floatVisibleCount;
+    floatAutoShow.value = settings.floatAutoShow;
+    floatDefaultMode.value = settings.floatDefaultMode;
+    autostartEnabled.value = settings.autostartEnabled;
   } catch {
     // 首次启动时 settings 表可能尚未写入种子数据，忽略即可
   }
@@ -99,6 +119,14 @@ onMounted(async () => {
   });
 });
 
+async function loadTags() {
+  try {
+    allTags.value = await listAllTags();
+  } catch {
+    allTags.value = [];
+  }
+}
+
 function openCreateModal() {
   createOpen.value = true;
 }
@@ -111,12 +139,16 @@ async function handleSave() {
   const ok = await save();
   if (ok) {
     closeDetail();
+    await loadTags();
   }
 }
 
 async function handleRemove() {
-  await remove();
-  closeDetail();
+  const ok = await remove();
+  if (ok) {
+    closeDetail();
+    await loadTags();
+  }
 }
 
 function toggleFilter() {
@@ -138,16 +170,20 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
   try {
     await createTodo(dto);
     createOpen.value = false;
+    await loadTags();
   } catch (err) {
     createModalRef.value?.setError(formatErrorMessage(err));
   }
 }
 
-async function handleAddReminder(datetime: string) {
+async function handleAddReminder(
+  datetime: string,
+  repeatType?: import("@/api/types").RepeatType,
+) {
   if (!selectedId.value) return;
   reminderError.value = null;
   try {
-    await addReminder(selectedId.value, datetime);
+    await addReminder(selectedId.value, datetime, repeatType);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
@@ -163,9 +199,31 @@ async function handleRemoveReminder(id: string) {
   }
 }
 
-async function handleNotificationToggle(enabled: boolean) {
-  notificationEnabled.value = enabled;
-  await updateSettings({ notificationEnabled: enabled });
+async function handleSnoozeReminder(id: string, minutes: number) {
+  if (!selectedId.value) return;
+  reminderError.value = null;
+  try {
+    await snoozeReminder(id, selectedId.value, minutes);
+  } catch (err) {
+    reminderError.value = formatErrorMessage(err);
+  }
+}
+
+async function handleSettingsUpdate(payload: {
+  notificationEnabled?: boolean;
+  floatAlwaysOnTop?: boolean;
+  floatVisibleCount?: number;
+  floatAutoShow?: boolean;
+  floatDefaultMode?: import("@/api/types").FloatDefaultMode;
+  autostartEnabled?: boolean;
+}) {
+  const settings = await updateSettings(payload);
+  notificationEnabled.value = settings.notificationEnabled;
+  floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
+  floatVisibleCount.value = settings.floatVisibleCount;
+  floatAutoShow.value = settings.floatAutoShow;
+  floatDefaultMode.value = settings.floatDefaultMode;
+  autostartEnabled.value = settings.autostartEnabled;
 }
 </script>
 
@@ -187,8 +245,13 @@ async function handleNotificationToggle(enabled: boolean) {
         :collapsed="filterCollapsed"
         :selected-statuses="selectedStatuses"
         :selected-priorities="selectedPriorities"
+        :selected-tags="selectedTags"
+        :all-tags="allTags"
+        :due-date-filter="dueDateFilter"
         @toggle-status="toggleStatusFilter"
         @toggle-priority="togglePriorityFilter"
+        @toggle-tag="toggleTagFilter"
+        @set-due-date-filter="setDueDateFilter"
       />
 
       <main class="main-content">
@@ -214,6 +277,8 @@ async function handleNotificationToggle(enabled: boolean) {
       v-model:edit-title="editTitle"
       v-model:edit-description="editDescription"
       v-model:edit-priority="editPriority"
+      v-model:edit-due-date="editDueDate"
+      v-model:edit-tags="editTags"
       :saving="saving"
       :error="detailError"
       :reminders="reminders"
@@ -221,10 +286,11 @@ async function handleNotificationToggle(enabled: boolean) {
       :reminders-error="remindersError ?? reminderError"
       @close="closeDetail"
       @save="handleSave"
-      @toggle-complete="toggleComplete"
+      @transition="transitionTo"
       @remove="handleRemove"
       @add-reminder="handleAddReminder"
       @remove-reminder="handleRemoveReminder"
+      @snooze-reminder="handleSnoozeReminder"
     />
 
     <CreateTodoModal
@@ -237,8 +303,13 @@ async function handleNotificationToggle(enabled: boolean) {
     <SettingsModal
       :open="settingsOpen"
       :notification-enabled="notificationEnabled"
+      :float-always-on-top="floatAlwaysOnTop"
+      :float-visible-count="floatVisibleCount"
+      :float-auto-show="floatAutoShow"
+      :float-default-mode="floatDefaultMode"
+      :autostart-enabled="autostartEnabled"
       @close="settingsOpen = false"
-      @update:notification-enabled="handleNotificationToggle"
+      @update="handleSettingsUpdate"
     />
   </div>
 </template>

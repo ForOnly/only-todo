@@ -17,4 +17,8 @@ impl SettingsService {
     pub fn is_notification_enabled(db: &Database) -> Result<bool, AppError> {
         Ok(SettingsRepository::get(db)?.notification_enabled)
     }
+
+    pub fn float_always_on_top(db: &Database) -> Result<bool, AppError> {
+        Ok(SettingsRepository::get(db)?.float_always_on_top)
+    }
 }

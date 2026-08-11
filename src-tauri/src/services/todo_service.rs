@@ -1,17 +1,24 @@
+use chrono::{DateTime, Utc};
+use serde_json;
+
 use crate::domain::{
     priority::Priority,
     status::TodoStatus,
     todo::{
-        CreateTodoDto, ListTodoQuery, PaginatedResponse, Todo, TodoDto, UpdateTodoDto,
+        CreateTodoDto, ListTodoQuery, PaginatedResponse, TodoDto, UpdateTodoDto,
     },
 };
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
+use crate::repository::event_repository::EventRepository;
+use crate::repository::reminder_repository::ReminderRepository;
 use crate::repository::todo_repository::TodoRepository;
 
 const MAX_TITLE_LEN: usize = 200;
 const MAX_DESCRIPTION_LEN: usize = 5000;
 const MAX_PAGE_SIZE: u32 = 200;
+const MAX_TAGS: usize = 10;
+const MAX_TAG_LEN: usize = 30;
 
 pub struct TodoService;
 
@@ -21,6 +28,9 @@ impl TodoService {
         validate_title(&dto.title)?;
         if let Some(description) = &dto.description {
             validate_description(description)?;
+        }
+        if let Some(tags) = &dto.tags {
+            validate_tags(tags)?;
         }
 
         let priority = dto.priority.unwrap_or(Priority::Medium);
@@ -35,13 +45,25 @@ impl TodoService {
         if let Some(description) = &dto.description {
             validate_description(description)?;
         }
+        if let Some(tags) = &dto.tags {
+            validate_tags(tags)?;
+        }
+
+        let existing = TodoRepository::get_by_id(db, &dto.id)?;
+        if existing.deleted_at.is_some() {
+            return Err(AppError::NotFound {
+                message: format!("todo {} not found", dto.id),
+            });
+        }
 
         let todo = TodoRepository::update(db, &dto)?;
         Ok(todo.into())
     }
 
     pub fn delete(db: &Database, id: &str) -> Result<(), AppError> {
-        TodoRepository::soft_delete(db, id)
+        TodoRepository::soft_delete(db, id)?;
+        ReminderRepository::disable_by_todo(db, id)?;
+        Ok(())
     }
 
     pub fn restore(db: &Database, id: &str) -> Result<TodoDto, AppError> {
@@ -81,6 +103,26 @@ impl TodoService {
         })
     }
 
+    pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
+        TodoRepository::list_all_tags(db)
+    }
+
+    pub fn count_active(db: &Database) -> Result<u64, AppError> {
+        TodoRepository::count_active(db)
+    }
+
+    pub fn count_due_urgency(db: &Database) -> Result<(u64, u64), AppError> {
+        use chrono::{Duration, Utc};
+        let now = Utc::now();
+        let start_of_today = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
+        let start = start_of_today.and_utc();
+        let end = start + Duration::days(1);
+        let overdue = TodoRepository::count_overdue(db, &start.to_rfc3339())?;
+        let due_today =
+            TodoRepository::count_due_today(db, &start.to_rfc3339(), &end.to_rfc3339())?;
+        Ok((overdue, due_today))
+    }
+
     pub fn transition(db: &Database, id: &str, target: TodoStatus) -> Result<TodoDto, AppError> {
         let todo = TodoRepository::get_by_id(db, id)?;
         if todo.deleted_at.is_some() {
@@ -89,7 +131,7 @@ impl TodoService {
             });
         }
 
-        if !is_valid_v1_transition(todo.status, target) {
+        if !is_valid_transition(todo.status, target) {
             return Err(AppError::InvalidTransition {
                 message: format!(
                     "cannot transition from {} to {}",
@@ -103,18 +145,29 @@ impl TodoService {
             return Ok(todo.into());
         }
 
+        let from = todo.status;
         let updated = TodoRepository::transition(db, id, target)?;
+        let payload = serde_json::json!({ "from": from.as_str(), "to": target.as_str() }).to_string();
+        let _ = EventRepository::write(db, "todo", id, "todo.transitioned", &payload);
         Ok(updated.into())
     }
 }
 
-fn is_valid_v1_transition(from: TodoStatus, to: TodoStatus) -> bool {
+fn is_valid_transition(from: TodoStatus, to: TodoStatus) -> bool {
+    if from == to {
+        return true;
+    }
     matches!(
         (from, to),
-        (TodoStatus::Todo, TodoStatus::Done)
+        (TodoStatus::Todo, TodoStatus::Doing)
+            | (TodoStatus::Todo, TodoStatus::Done)
+            | (TodoStatus::Todo, TodoStatus::Archived)
+            | (TodoStatus::Doing, TodoStatus::Todo)
+            | (TodoStatus::Doing, TodoStatus::Done)
+            | (TodoStatus::Doing, TodoStatus::Archived)
             | (TodoStatus::Done, TodoStatus::Todo)
-            | (TodoStatus::Todo, TodoStatus::Todo)
-            | (TodoStatus::Done, TodoStatus::Done)
+            | (TodoStatus::Done, TodoStatus::Archived)
+            | (TodoStatus::Archived, TodoStatus::Todo)
     )
 }
 
@@ -135,4 +188,30 @@ fn validate_description(description: &str) -> Result<(), AppError> {
         });
     }
     Ok(())
+}
+
+fn validate_tags(tags: &[String]) -> Result<(), AppError> {
+    if tags.len() > MAX_TAGS {
+        return Err(AppError::ValidationError {
+            message: format!("tags must have at most {MAX_TAGS} items"),
+        });
+    }
+    for tag in tags {
+        let trimmed = tag.trim();
+        if trimmed.is_empty() || trimmed.len() > MAX_TAG_LEN {
+            return Err(AppError::ValidationError {
+                message: format!("each tag must be 1-{MAX_TAG_LEN} characters"),
+            });
+        }
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn parse_datetime(value: &str) -> Result<DateTime<Utc>, AppError> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|error| AppError::ValidationError {
+            message: format!("invalid datetime: {error}"),
+        })
 }

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
+use serde_json;
 use uuid::Uuid;
 
 use crate::domain::{
@@ -15,12 +16,25 @@ pub struct TodoRepository;
 impl TodoRepository {
     pub fn create(db: &Database, dto: &CreateTodoDto, priority: Priority) -> Result<Todo, AppError> {
         let now = Utc::now();
+        let due_date = dto
+            .due_date
+            .as_ref()
+            .map(|value| parse_optional_datetime(value))
+            .transpose()?
+            .flatten();
+        let tags = dto.tags.clone().unwrap_or_default();
+        let tags_json = serde_json::to_string(&tags).map_err(|error| AppError::InternalError {
+            message: error.to_string(),
+        })?;
+
         let todo = Todo {
             id: Uuid::new_v4().to_string(),
             title: dto.title.clone(),
             description: dto.description.clone().unwrap_or_default(),
             status: TodoStatus::Todo,
             priority,
+            due_date,
+            tags,
             created_at: now,
             updated_at: now,
             completed_at: None,
@@ -29,14 +43,16 @@ impl TodoRepository {
 
         db.with_conn(|conn| {
             conn.execute(
-                "INSERT INTO todos (id, title, description, status, priority, created_at, updated_at, completed_at, deleted_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO todos (id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     todo.id,
                     todo.title,
                     todo.description,
                     todo.status.as_str(),
                     todo.priority.as_str(),
+                    todo.due_date.map(|value| value.to_rfc3339()),
+                    tags_json,
                     todo.created_at.to_rfc3339(),
                     todo.updated_at.to_rfc3339(),
                     Option::<String>::None,
@@ -62,15 +78,30 @@ impl TodoRepository {
         if let Some(priority) = dto.priority {
             todo.priority = priority;
         }
+        if let Some(due_date) = &dto.due_date {
+            todo.due_date = match due_date {
+                Some(value) => Some(parse_datetime(value)?),
+                None => None,
+            };
+        }
+        if let Some(tags) = &dto.tags {
+            todo.tags = tags.clone();
+        }
         todo.updated_at = Utc::now();
+
+        let tags_json = serde_json::to_string(&todo.tags).map_err(|error| AppError::InternalError {
+            message: error.to_string(),
+        })?;
 
         db.with_conn(|conn| {
             conn.execute(
-                "UPDATE todos SET title = ?1, description = ?2, priority = ?3, updated_at = ?4 WHERE id = ?5",
+                "UPDATE todos SET title = ?1, description = ?2, priority = ?3, due_date = ?4, tags = ?5, updated_at = ?6 WHERE id = ?7",
                 params![
                     todo.title,
                     todo.description,
                     todo.priority.as_str(),
+                    todo.due_date.map(|value| value.to_rfc3339()),
+                    tags_json,
                     todo.updated_at.to_rfc3339(),
                     todo.id,
                 ],
@@ -125,7 +156,7 @@ impl TodoRepository {
     pub fn get_by_id(db: &Database, id: &str) -> Result<Todo, AppError> {
         db.with_conn(|conn| {
             conn.query_row(
-                "SELECT id, title, description, status, priority, created_at, updated_at, completed_at, deleted_at
+                "SELECT id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at
                  FROM todos WHERE id = ?1",
                 params![id],
                 map_row,
@@ -148,11 +179,12 @@ impl TodoRepository {
             });
         }
 
+        let previous = todo.status;
         todo.status = status;
         todo.updated_at = Utc::now();
         todo.completed_at = if status == TodoStatus::Done {
             Some(Utc::now())
-        } else if status == TodoStatus::Todo {
+        } else if previous == TodoStatus::Done {
             None
         } else {
             todo.completed_at
@@ -175,6 +207,81 @@ impl TodoRepository {
         })
     }
 
+    pub fn count_active(db: &Database) -> Result<u64, AppError> {
+        db.with_conn(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM todos WHERE deleted_at IS NULL AND status IN ('Todo', 'Doing')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })
+        })
+    }
+
+    /// 已逾期（due_date < 今日零点）的 Todo/Doing 任务数
+    pub fn count_overdue(db: &Database, now_iso: &str) -> Result<u64, AppError> {
+        db.with_conn(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM todos
+                 WHERE deleted_at IS NULL AND status IN ('Todo', 'Doing')
+                 AND due_date IS NOT NULL AND due_date < ?1",
+                rusqlite::params![now_iso],
+                |row| row.get(0),
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })
+        })
+    }
+
+    /// 今日到期（due_date 在今日范围内）的 Todo/Doing 任务数
+    pub fn count_due_today(db: &Database, start_iso: &str, end_iso: &str) -> Result<u64, AppError> {
+        db.with_conn(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM todos
+                 WHERE deleted_at IS NULL AND status IN ('Todo', 'Doing')
+                 AND due_date IS NOT NULL AND due_date >= ?1 AND due_date < ?2",
+                rusqlite::params![start_iso, end_iso],
+                |row| row.get(0),
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })
+        })
+    }
+
+    pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
+        db.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT tags FROM todos WHERE deleted_at IS NULL")
+                .map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+
+            let mut tags = std::collections::BTreeSet::new();
+            for row in rows {
+                let json = row.map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+                if let Ok(values) = serde_json::from_str::<Vec<String>>(&json) {
+                    for tag in values {
+                        if !tag.trim().is_empty() {
+                            tags.insert(tag);
+                        }
+                    }
+                }
+            }
+            Ok(tags.into_iter().collect())
+        })
+    }
+
     pub fn list(db: &Database, query: &ListTodoQuery) -> Result<PaginatedResponse<Todo>, AppError> {
         let mut conditions = vec!["deleted_at IS NULL".to_string()];
         let mut bind_values: Vec<String> = Vec::new();
@@ -183,27 +290,30 @@ impl TodoRepository {
             if !statuses.is_empty() {
                 let placeholders: Vec<String> =
                     statuses.iter().map(|_| "?".to_string()).collect();
-                conditions.push(format!(
-                    "status IN ({})",
-                    placeholders.join(", ")
-                ));
+                conditions.push(format!("status IN ({})", placeholders.join(", ")));
                 for status in statuses {
                     bind_values.push(status.as_str().to_string());
                 }
             }
+        } else if !query.include_archived.unwrap_or(false) {
+            conditions.push("status != 'Archived'".to_string());
         }
 
         if let Some(priorities) = &query.priority {
             if !priorities.is_empty() {
                 let placeholders: Vec<String> =
                     priorities.iter().map(|_| "?".to_string()).collect();
-                conditions.push(format!(
-                    "priority IN ({})",
-                    placeholders.join(", ")
-                ));
+                conditions.push(format!("priority IN ({})", placeholders.join(", ")));
                 for priority in priorities {
                     bind_values.push(priority.as_str().to_string());
                 }
+            }
+        }
+
+        if let Some(tags) = &query.tags {
+            for tag in tags {
+                conditions.push("tags LIKE ?".to_string());
+                bind_values.push(format!("%\"{tag}\"%"));
             }
         }
 
@@ -216,13 +326,24 @@ impl TodoRepository {
             }
         }
 
+        if let Some(after) = &query.due_date_after {
+            conditions.push("due_date IS NOT NULL AND due_date >= ?".to_string());
+            bind_values.push(after.clone());
+        }
+
+        if let Some(before) = &query.due_date_before {
+            // 半开区间上界，与 count_overdue / count_due_today 一致
+            conditions.push("due_date IS NOT NULL AND due_date < ?".to_string());
+            bind_values.push(before.clone());
+        }
+
         let where_clause = conditions.join(" AND ");
         let order_clause = build_order_clause(&query.sort_by, &query.sort_order);
         let offset = (query.page.saturating_sub(1) as u64) * query.page_size as u64;
 
         let count_sql = format!("SELECT COUNT(*) FROM todos WHERE {where_clause}");
         let list_sql = format!(
-            "SELECT id, title, description, status, priority, created_at, updated_at, completed_at, deleted_at
+            "SELECT id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at
              FROM todos WHERE {where_clause} ORDER BY {order_clause} LIMIT ? OFFSET ?"
         );
 
@@ -278,9 +399,10 @@ fn build_order_clause(sort_by: &str, sort_order: &str) -> String {
     };
 
     match sort_by {
-        "created_at" => format!("created_at {direction}"),
-        "updated_at" => format!("updated_at {direction}"),
-        "completed_at" => format!("completed_at {direction}"),
+        "created_at" | "createdAt" => format!("created_at {direction}"),
+        "updated_at" | "updatedAt" => format!("updated_at {direction}"),
+        "completed_at" | "completedAt" => format!("completed_at {direction}"),
+        "due_date" | "dueDate" => format!("due_date IS NULL, due_date {direction}"),
         "title" => format!("title {direction}"),
         _ => format!(
             "CASE priority WHEN 'Urgent' THEN 4 WHEN 'High' THEN 3 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 1 END {direction}, created_at DESC"
@@ -291,10 +413,14 @@ fn build_order_clause(sort_by: &str, sort_order: &str) -> String {
 fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
     let status_str: String = row.get(3)?;
     let priority_str: String = row.get(4)?;
-    let created_at: String = row.get(5)?;
-    let updated_at: String = row.get(6)?;
-    let completed_at: Option<String> = row.get(7)?;
-    let deleted_at: Option<String> = row.get(8)?;
+    let due_date: Option<String> = row.get(5)?;
+    let tags_json: String = row.get(6)?;
+    let created_at: String = row.get(7)?;
+    let updated_at: String = row.get(8)?;
+    let completed_at: Option<String> = row.get(9)?;
+    let deleted_at: Option<String> = row.get(10)?;
+
+    let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
     Ok(Todo {
         id: row.get(0)?,
@@ -302,15 +428,30 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Todo> {
         description: row.get(2)?,
         status: TodoStatus::from_str(&status_str).unwrap_or(TodoStatus::Todo),
         priority: Priority::from_str(&priority_str).unwrap_or(Priority::Medium),
-        created_at: parse_datetime(&created_at),
-        updated_at: parse_datetime(&updated_at),
-        completed_at: completed_at.map(|value| parse_datetime(&value)),
-        deleted_at: deleted_at.map(|value| parse_datetime(&value)),
+        due_date: due_date.map(|value| parse_datetime_unchecked(&value)),
+        tags,
+        created_at: parse_datetime_unchecked(&created_at),
+        updated_at: parse_datetime_unchecked(&updated_at),
+        completed_at: completed_at.map(|value| parse_datetime_unchecked(&value)),
+        deleted_at: deleted_at.map(|value| parse_datetime_unchecked(&value)),
     })
 }
 
-fn parse_datetime(value: &str) -> DateTime<Utc> {
+fn parse_datetime(value: &str) -> Result<DateTime<Utc>, AppError> {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
-        .unwrap_or_else(|_| Utc::now())
+        .map_err(|error| AppError::ValidationError {
+            message: format!("invalid datetime: {error}"),
+        })
+}
+
+fn parse_optional_datetime(value: &str) -> Result<Option<DateTime<Utc>>, AppError> {
+    if value.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(parse_datetime(value)?))
+}
+
+fn parse_datetime_unchecked(value: &str) -> DateTime<Utc> {
+    parse_datetime(value).unwrap_or_else(|_| Utc::now())
 }

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use rusqlite::{params, OptionalExtension};
 use uuid::Uuid;
 
@@ -8,19 +8,36 @@ use crate::domain::reminder::{
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
+const MAX_SNOOZE_COUNT: i32 = 3;
+
 pub struct ReminderRepository;
 
 impl ReminderRepository {
     pub fn count_by_todo(db: &Database, todo_id: &str) -> Result<i64, AppError> {
         db.with_conn(|conn| {
             conn.query_row(
-                "SELECT COUNT(*) FROM reminders WHERE todo_id = ?1",
+                "SELECT COUNT(*) FROM reminders WHERE todo_id = ?1 AND enabled = 1",
                 params![todo_id],
                 |row| row.get(0),
             )
             .map_err(|error| AppError::DbError {
                 message: error.to_string(),
             })
+        })
+    }
+
+    /// 软删任务时禁用其提醒，避免周期项继续被 scheduler 推进
+    pub fn disable_by_todo(db: &Database, todo_id: &str) -> Result<(), AppError> {
+        let updated_at = Utc::now().to_rfc3339();
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE reminders SET enabled = 0, updated_at = ?1 WHERE todo_id = ?2 AND enabled = 1",
+                params![updated_at, todo_id],
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+            Ok(())
         })
     }
 
@@ -196,12 +213,25 @@ impl ReminderRepository {
         })
     }
 
+    /// 推进下次触发时间：一次性禁用；周期则跳到严格大于 now 的下一槽，避免 downtime 后每 tick 刷屏。
     pub fn advance(db: &Database, reminder: &Reminder) -> Result<(), AppError> {
-        let updated_at = Utc::now().to_rfc3339();
+        let now = Utc::now();
+        let updated_at = now.to_rfc3339();
         let (enabled, next_trigger_at) = match reminder.repeat_type {
             RepeatType::None => (0, reminder.next_trigger_at.to_rfc3339()),
-            RepeatType::Daily | RepeatType::Weekly => {
-                (1, reminder.next_trigger_at.to_rfc3339())
+            RepeatType::Daily => {
+                let mut next = reminder.next_trigger_at + ChronoDuration::days(1);
+                while next <= now {
+                    next += ChronoDuration::days(1);
+                }
+                (1, next.to_rfc3339())
+            }
+            RepeatType::Weekly => {
+                let mut next = reminder.next_trigger_at + ChronoDuration::weeks(1);
+                while next <= now {
+                    next += ChronoDuration::weeks(1);
+                }
+                (1, next.to_rfc3339())
             }
         };
 
@@ -214,6 +244,37 @@ impl ReminderRepository {
                 message: error.to_string(),
             })?;
             Ok(())
+        })
+    }
+
+    pub fn snooze(db: &Database, id: &str, minutes: i64) -> Result<Reminder, AppError> {
+        let mut reminder = Self::get_by_id(db, id)?;
+        if reminder.snooze_count >= MAX_SNOOZE_COUNT {
+            return Err(AppError::ValidationError {
+                message: "snooze limit reached".into(),
+            });
+        }
+
+        reminder.snooze_count += 1;
+        reminder.next_trigger_at = Utc::now() + ChronoDuration::minutes(minutes);
+        reminder.enabled = true;
+        reminder.updated_at = Utc::now();
+
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE reminders SET snooze_count = ?1, next_trigger_at = ?2, enabled = ?3, updated_at = ?4 WHERE id = ?5",
+                params![
+                    reminder.snooze_count,
+                    reminder.next_trigger_at.to_rfc3339(),
+                    reminder.enabled as i32,
+                    reminder.updated_at.to_rfc3339(),
+                    reminder.id,
+                ],
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+            Ok(reminder)
         })
     }
 }

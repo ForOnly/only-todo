@@ -10,6 +10,9 @@ import AppModal from "@/components/common/AppModal.vue";
 
 const props = defineProps<{
   open: boolean;
+  compact?: boolean;
+  /** 默认 true；悬浮窗内禁用 Teleport */
+  teleport?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -72,7 +75,13 @@ defineExpose({ resetSubmitting, setError });
 </script>
 
 <template>
-  <AppModal :open="open" title="新建任务" @close="emit('close')">
+  <AppModal
+    :open="open"
+    :compact="compact"
+    :teleport="teleport"
+    title="新建任务"
+    @close="emit('close')"
+  >
     <AppErrorBanner v-if="error" :message="error" />
 
     <label class="app-field">

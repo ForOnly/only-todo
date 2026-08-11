@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 
-import type { ReminderDto, TodoDto } from "@/api/types";
+import type { ReminderDto, TodoDto, TodoStatus } from "@/api/types";
 import TodoDetail from "@/components/todo/TodoDetail.vue";
 
 defineProps<{
@@ -10,6 +10,8 @@ defineProps<{
   editTitle: string;
   editDescription: string;
   editPriority: TodoDto["priority"];
+  editDueDate: string;
+  editTags: string;
   saving: boolean;
   error: string | null;
   reminders: ReminderDto[];
@@ -22,11 +24,14 @@ const emit = defineEmits<{
   "update:editTitle": [value: string];
   "update:editDescription": [value: string];
   "update:editPriority": [value: TodoDto["priority"]];
+  "update:editDueDate": [value: string];
+  "update:editTags": [value: string];
   save: [];
-  toggleComplete: [];
+  transition: [status: TodoStatus];
   remove: [];
-  addReminder: [datetime: string];
+  addReminder: [datetime: string, repeatType?: import("@/api/types").RepeatType];
   removeReminder: [id: string];
+  snoozeReminder: [id: string, minutes: number];
 }>();
 
 function onKeydown(event: KeyboardEvent) {
@@ -60,6 +65,8 @@ onUnmounted(() => {
             :edit-title="editTitle"
             :edit-description="editDescription"
             :edit-priority="editPriority"
+            :edit-due-date="editDueDate"
+            :edit-tags="editTags"
             :saving="saving"
             :error="error"
             :reminders="reminders"
@@ -68,12 +75,15 @@ onUnmounted(() => {
             @update:edit-title="emit('update:editTitle', $event)"
             @update:edit-description="emit('update:editDescription', $event)"
             @update:edit-priority="emit('update:editPriority', $event)"
+            @update:edit-due-date="emit('update:editDueDate', $event)"
+            @update:edit-tags="emit('update:editTags', $event)"
             @save="emit('save')"
             @close="emit('close')"
-            @toggle-complete="emit('toggleComplete')"
+            @transition="emit('transition', $event)"
             @remove="emit('remove')"
-            @add-reminder="emit('addReminder', $event)"
+            @add-reminder="(dt, rt) => emit('addReminder', dt, rt)"
             @remove-reminder="emit('removeReminder', $event)"
+            @snooze-reminder="(id, min) => emit('snoozeReminder', id, min)"
           />
         </div>
       </aside>
