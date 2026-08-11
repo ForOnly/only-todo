@@ -14,12 +14,7 @@ withDefaults(
 </script>
 
 <template>
-  <button
-    class="app-btn"
-    :class="`app-btn--${variant}`"
-    :disabled="disabled"
-    :type="type"
-  >
+  <button class="app-btn" :class="`app-btn--${variant}`" :disabled="disabled" :type="type">
     <slot />
   </button>
 </template>

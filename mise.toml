@@ -20,3 +20,16 @@ dir = "src-tauri"
 description = "构建生产包"
 run = "npm run tauri build"
 depends = ["install"]
+
+[tasks.format]
+description = "Prettier 格式化前端"
+run = "npm run format"
+
+[tasks.format-check]
+description = "Prettier 检查前端格式"
+run = "npm run format:check"
+
+[tasks.clean]
+description = "清理 Rust 编译产物"
+run = "cargo clean"
+dir = "src-tauri"

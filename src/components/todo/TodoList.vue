@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import AppButton from "@/components/common/AppButton.vue";
-import {
-  PRIORITY_LABELS,
-  STATUS_LABELS,
-  type TodoDto,
-} from "@/api/types";
+import { PRIORITY_LABELS, STATUS_LABELS, type TodoDto } from "@/api/types";
 import { formatDate, formatDueDate } from "@/utils/date";
 
 defineProps<{
@@ -48,13 +44,9 @@ const emit = defineEmits<{
       <li v-if="todos.length === 0" class="hint">暂无任务</li>
     </ul>
     <footer class="pagination">
-      <AppButton :disabled="page <= 1" @click="emit('prevPage')">
-        上一页
-      </AppButton>
+      <AppButton :disabled="page <= 1" @click="emit('prevPage')"> 上一页 </AppButton>
       <span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span>
-      <AppButton :disabled="page * pageSize >= total" @click="emit('nextPage')">
-        下一页
-      </AppButton>
+      <AppButton :disabled="page * pageSize >= total" @click="emit('nextPage')"> 下一页 </AppButton>
     </footer>
   </section>
 </template>

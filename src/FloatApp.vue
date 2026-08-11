@@ -79,9 +79,7 @@ const isBallHome = computed(() => defaultMode.value === "ball");
 const showPanelUi = computed(
   () => isPanel.value || (isDocked.value && (dockPeeked.value || peekInFlight.value)),
 );
-const showDockStrip = computed(
-  () => isDocked.value && !dockPeeked.value && !peekInFlight.value,
-);
+const showDockStrip = computed(() => isDocked.value && !dockPeeked.value && !peekInFlight.value);
 
 const {
   detail,
@@ -507,11 +505,7 @@ function cancelScheduledUnpeek() {
 
 function onCreateClose() {
   createOpen.value = false;
-  if (
-    isDocked.value &&
-    (dockPeeked.value || peekInFlight.value) &&
-    !pointerInsideFloat
-  ) {
+  if (isDocked.value && (dockPeeked.value || peekInFlight.value) && !pointerInsideFloat) {
     scheduleUnpeek();
   }
 }

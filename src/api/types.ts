@@ -1,13 +1,7 @@
 export type TodoStatus = "Todo" | "Doing" | "Done" | "Archived";
 export type Priority = "Low" | "Medium" | "High" | "Urgent";
 export type RepeatType = "none" | "daily" | "weekly";
-export type SortBy =
-  | "priority"
-  | "createdAt"
-  | "updatedAt"
-  | "completedAt"
-  | "dueDate"
-  | "title";
+export type SortBy = "priority" | "createdAt" | "updatedAt" | "completedAt" | "dueDate" | "title";
 export type SortOrder = "asc" | "desc";
 export type DueDateFilter = "all" | "today" | "overdue";
 export type FloatDisplayMode = "ball" | "panel" | "docked";

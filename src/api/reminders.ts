@@ -3,16 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import type { CreateReminderDto, ReminderDto, UpdateReminderDto } from "@/api/types";
 
 /** Tauri Command: create_reminder */
-export async function createReminder(
-  dto: CreateReminderDto,
-): Promise<ReminderDto> {
+export async function createReminder(dto: CreateReminderDto): Promise<ReminderDto> {
   return invoke("create_reminder", { dto });
 }
 
 /** Tauri Command: update_reminder */
-export async function updateReminder(
-  dto: UpdateReminderDto,
-): Promise<ReminderDto> {
+export async function updateReminder(dto: UpdateReminderDto): Promise<ReminderDto> {
   return invoke("update_reminder", { dto });
 }
 

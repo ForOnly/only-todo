@@ -84,11 +84,7 @@ export function useReminders(selectedId: Ref<string | null>): UseRemindersReturn
     await fetchReminders(todoId);
   }
 
-  async function snoozeReminder(
-    id: string,
-    todoId: string,
-    minutes: number,
-  ): Promise<void> {
+  async function snoozeReminder(id: string, todoId: string, minutes: number): Promise<void> {
     await reminderApi.snoozeReminder(id, minutes);
     await fetchReminders(todoId);
   }

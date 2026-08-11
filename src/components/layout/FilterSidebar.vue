@@ -49,11 +49,7 @@ const dueDateOptions: { value: DueDateFilter; label: string }[] = [
 
       <section>
         <h3>优先级</h3>
-        <label
-          v-for="priority in PRIORITY_OPTIONS"
-          :key="priority"
-          class="filter-item"
-        >
+        <label v-for="priority in PRIORITY_OPTIONS" :key="priority" class="filter-item">
           <input
             type="checkbox"
             :checked="selectedPriorities.includes(priority)"
@@ -65,11 +61,7 @@ const dueDateOptions: { value: DueDateFilter; label: string }[] = [
 
       <section>
         <h3>截止日期</h3>
-        <label
-          v-for="option in dueDateOptions"
-          :key="option.value"
-          class="filter-item"
-        >
+        <label v-for="option in dueDateOptions" :key="option.value" class="filter-item">
           <input
             type="radio"
             name="due-date-filter"

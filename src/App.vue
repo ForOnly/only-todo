@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
-import type { CreateTodoDto, DueDateFilter } from "@/api/types";
+import type { CreateTodoDto, DueDateFilter, FloatDefaultMode, RepeatType } from "@/api/types";
 import { listAllTags } from "@/api/todos";
 import { getSettings, updateSettings } from "@/api/settings";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
@@ -75,7 +75,7 @@ const notificationEnabled = ref(true);
 const floatAlwaysOnTop = ref(true);
 const floatVisibleCount = ref(5);
 const floatAutoShow = ref(true);
-const floatDefaultMode = ref<import("@/api/types").FloatDefaultMode>("ball");
+const floatDefaultMode = ref<FloatDefaultMode>("ball");
 const autostartEnabled = ref(false);
 const allTags = ref<string[]>([]);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
@@ -176,10 +176,7 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
   }
 }
 
-async function handleAddReminder(
-  datetime: string,
-  repeatType?: import("@/api/types").RepeatType,
-) {
+async function handleAddReminder(datetime: string, repeatType?: RepeatType) {
   if (!selectedId.value) return;
   reminderError.value = null;
   try {
@@ -214,7 +211,7 @@ async function handleSettingsUpdate(payload: {
   floatAlwaysOnTop?: boolean;
   floatVisibleCount?: number;
   floatAutoShow?: boolean;
-  floatDefaultMode?: import("@/api/types").FloatDefaultMode;
+  floatDefaultMode?: FloatDefaultMode;
   autostartEnabled?: boolean;
 }) {
   const settings = await updateSettings(payload);

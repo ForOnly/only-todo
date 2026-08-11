@@ -2,9 +2,7 @@ import type { CreateTodoFormModel } from "@/api/types";
 import { DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH } from "@/api/types";
 
 /** 调用 create_todo 前的客户端校验 */
-export function validateCreateTodoForm(
-  form: CreateTodoFormModel,
-): string | null {
+export function validateCreateTodoForm(form: CreateTodoFormModel): string | null {
   const title = form.title.trim();
   if (!title) {
     return "标题不能为空";

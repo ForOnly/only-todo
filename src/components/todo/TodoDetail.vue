@@ -84,12 +84,7 @@ function submitReminder() {
         <textarea
           rows="6"
           :value="editDescription"
-          @input="
-            emit(
-              'update:editDescription',
-              ($event.target as HTMLTextAreaElement).value,
-            )
-          "
+          @input="emit('update:editDescription', ($event.target as HTMLTextAreaElement).value)"
         />
       </label>
 

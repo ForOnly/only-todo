@@ -28,9 +28,7 @@ export async function getFloatWindowState(): Promise<FloatWindowState> {
 }
 
 /** Tauri Command: set_float_display_mode */
-export async function setFloatDisplayMode(
-  mode: FloatDisplayMode,
-): Promise<FloatWindowState> {
+export async function setFloatDisplayMode(mode: FloatDisplayMode): Promise<FloatWindowState> {
   return invoke("set_float_display_mode", { mode });
 }
 

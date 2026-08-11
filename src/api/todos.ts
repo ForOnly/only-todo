@@ -35,17 +35,12 @@ export async function getTodo(id: string): Promise<TodoDto> {
 }
 
 /** Tauri Command: list_todos */
-export async function listTodos(
-  query: ListTodoQuery = {},
-): Promise<PaginatedResponse<TodoDto>> {
+export async function listTodos(query: ListTodoQuery = {}): Promise<PaginatedResponse<TodoDto>> {
   return invoke("list_todos", { query });
 }
 
 /** Tauri Command: transition_todo */
-export async function transitionTodo(
-  id: string,
-  status: TodoStatus,
-): Promise<TodoDto> {
+export async function transitionTodo(id: string, status: TodoStatus): Promise<TodoDto> {
   return invoke("transition_todo", { id, status });
 }
 

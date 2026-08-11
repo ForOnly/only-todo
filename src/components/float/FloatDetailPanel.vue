@@ -11,6 +11,7 @@ import {
   STATUS_LABELS,
   STATUS_OPTIONS,
   type ReminderDto,
+  type RepeatType,
   type TodoDto,
   type TodoStatus,
 } from "@/api/types";
@@ -37,12 +38,12 @@ const emit = defineEmits<{
   close: [];
   save: [];
   transition: [status: TodoStatus];
-  addReminder: [datetime: string, repeatType?: import("@/api/types").RepeatType];
+  addReminder: [datetime: string, repeatType?: RepeatType];
   removeReminder: [id: string];
 }>();
 
 const reminderInput = ref("");
-const repeatType = ref<import("@/api/types").RepeatType>("none");
+const repeatType = ref<RepeatType>("none");
 
 function submitReminder() {
   if (!reminderInput.value) return;
@@ -75,9 +76,7 @@ function submitReminder() {
       <textarea
         rows="3"
         :value="editDescription"
-        @input="
-          emit('update:editDescription', ($event.target as HTMLTextAreaElement).value)
-        "
+        @input="emit('update:editDescription', ($event.target as HTMLTextAreaElement).value)"
       />
     </label>
 
@@ -138,9 +137,7 @@ function submitReminder() {
         <li v-for="item in reminders" :key="item.id">
           <span>{{ formatDate(item.remindAt) }}</span>
           <span>{{ REPEAT_TYPE_LABELS[item.repeatType] }}</span>
-          <button class="link" type="button" @click="emit('removeReminder', item.id)">
-            删除
-          </button>
+          <button class="link" type="button" @click="emit('removeReminder', item.id)">删除</button>
         </li>
       </ul>
     </section>

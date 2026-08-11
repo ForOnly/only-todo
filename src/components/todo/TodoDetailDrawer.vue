@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 
-import type { ReminderDto, TodoDto, TodoStatus } from "@/api/types";
+import type { ReminderDto, RepeatType, TodoDto, TodoStatus } from "@/api/types";
 import TodoDetail from "@/components/todo/TodoDetail.vue";
 
 defineProps<{
@@ -29,7 +29,7 @@ const emit = defineEmits<{
   save: [];
   transition: [status: TodoStatus];
   remove: [];
-  addReminder: [datetime: string, repeatType?: import("@/api/types").RepeatType];
+  addReminder: [datetime: string, repeatType?: RepeatType];
   removeReminder: [id: string];
   snoozeReminder: [id: string, minutes: number];
 }>();
