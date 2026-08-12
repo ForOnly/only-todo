@@ -78,7 +78,7 @@ pub struct UpdateTodoDto {
     pub description: Option<String>,
     #[serde(default)]
     pub priority: Option<Priority>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_clearable_due_date")]
     pub due_date: Option<Option<String>>,
     #[serde(default)]
     pub tags: Option<Vec<String>>,
@@ -101,6 +101,9 @@ pub struct ListTodoQuery {
     pub due_date_after: Option<String>,
     #[serde(default)]
     pub include_archived: Option<bool>,
+    /// 为 true 时只列软删任务（回收站）
+    #[serde(default)]
+    pub include_deleted: Option<bool>,
     #[serde(default = "default_sort_by")]
     pub sort_by: String,
     #[serde(default = "default_sort_order")]
@@ -134,4 +137,93 @@ pub struct PaginatedResponse<T> {
     pub total: u64,
     pub page: u32,
     pub page_size: u32,
+}
+
+/// dueDate：缺省=不更新；null/空串=清空；字符串=设值
+fn deserialize_clearable_due_date<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct ClearableDueDateVisitor;
+
+    impl<'de> Visitor<'de> for ClearableDueDateVisitor {
+        type Value = Option<Option<String>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("null, a string, or absent dueDate")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(None))
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(None))
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_any(StringOrNullVisitor)
+        }
+    }
+
+    struct StringOrNullVisitor;
+
+    impl<'de> Visitor<'de> for StringOrNullVisitor {
+        type Value = Option<Option<String>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("null or a string")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(None))
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(None))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() {
+                Ok(Some(None))
+            } else {
+                Ok(Some(Some(value.to_string())))
+            }
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() {
+                Ok(Some(None))
+            } else {
+                Ok(Some(Some(value)))
+            }
+        }
+    }
+
+    deserializer.deserialize_option(ClearableDueDateVisitor)
 }

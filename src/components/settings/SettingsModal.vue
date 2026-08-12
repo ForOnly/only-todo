@@ -3,11 +3,13 @@ import { ref, watch } from "vue";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppModal from "@/components/common/AppModal.vue";
-import type { FloatDefaultMode, UpdateSettingsDto } from "@/api/types";
+import type { FloatDefaultMode, SortBy, SortOrder, UpdateSettingsDto } from "@/api/types";
+import { parseListDefaultSort, serializeListDefaultSort } from "@/utils/listSort";
 
 const props = defineProps<{
   open: boolean;
   notificationEnabled: boolean;
+  listDefaultSort: string;
   floatAlwaysOnTop: boolean;
   floatVisibleCount: number;
   floatAutoShow: boolean;
@@ -28,6 +30,8 @@ const localAutoShow = ref(props.floatAutoShow);
 const localDefaultMode = ref<FloatDefaultMode>(props.floatDefaultMode);
 const localHoverPreview = ref(props.floatHoverPreview);
 const localAutostart = ref(props.autostartEnabled);
+const localSortBy = ref<SortBy>("priority");
+const localSortOrder = ref<SortOrder>("desc");
 
 watch(
   () => props.open,
@@ -40,6 +44,9 @@ watch(
       localDefaultMode.value = props.floatDefaultMode;
       localHoverPreview.value = props.floatHoverPreview;
       localAutostart.value = props.autostartEnabled;
+      const sort = parseListDefaultSort(props.listDefaultSort);
+      localSortBy.value = sort.sortBy;
+      localSortOrder.value = sort.sortOrder;
     }
   },
 );
@@ -47,6 +54,10 @@ watch(
 function save() {
   emit("update", {
     notificationEnabled: localNotification.value,
+    listDefaultSort: serializeListDefaultSort({
+      sortBy: localSortBy.value,
+      sortOrder: localSortOrder.value,
+    }),
     floatAlwaysOnTop: localAlwaysOnTop.value,
     floatVisibleCount: localVisibleCount.value,
     floatAutoShow: localAutoShow.value,
@@ -66,6 +77,28 @@ function save() {
         <input v-model="localNotification" type="checkbox" />
         <span>启用提醒通知</span>
       </label>
+    </section>
+
+    <section class="group">
+      <h3>列表</h3>
+      <label class="setting-row">
+        <span>默认排序</span>
+        <select v-model="localSortBy" class="select-input">
+          <option value="priority">优先级</option>
+          <option value="dueDate">截止日期</option>
+          <option value="updatedAt">最近更新</option>
+          <option value="createdAt">创建时间</option>
+          <option value="title">标题</option>
+        </select>
+      </label>
+      <label class="setting-row">
+        <span>方向</span>
+        <select v-model="localSortOrder" class="select-input">
+          <option value="desc">降序</option>
+          <option value="asc">升序</option>
+        </select>
+      </label>
+      <p class="hint">打开主窗或切换视图时使用此默认排序（可在列表内临时改）。</p>
     </section>
 
     <section class="group">

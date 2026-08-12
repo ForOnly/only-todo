@@ -288,8 +288,14 @@ impl TodoRepository {
     }
 
     pub fn list(db: &Database, query: &ListTodoQuery) -> Result<PaginatedResponse<Todo>, AppError> {
-        let mut conditions = vec!["deleted_at IS NULL".to_string()];
+        let mut conditions: Vec<String> = Vec::new();
         let mut bind_values: Vec<String> = Vec::new();
+
+        if query.include_deleted.unwrap_or(false) {
+            conditions.push("deleted_at IS NOT NULL".to_string());
+        } else {
+            conditions.push("deleted_at IS NULL".to_string());
+        }
 
         if let Some(statuses) = &query.status {
             if !statuses.is_empty() {
@@ -299,7 +305,8 @@ impl TodoRepository {
                     bind_values.push(status.as_str().to_string());
                 }
             }
-        } else if !query.include_archived.unwrap_or(false) {
+        } else if !query.include_archived.unwrap_or(false) && !query.include_deleted.unwrap_or(false)
+        {
             conditions.push("status != 'Archived'".to_string());
         }
 

@@ -3,6 +3,7 @@ import { nextTick, ref, watch } from "vue";
 
 import type { CreateTodoDto, CreateTodoFormModel } from "@/api/types";
 import { DEFAULT_CREATE_TODO_FORM, PRIORITY_LABELS, PRIORITY_OPTIONS } from "@/api/types";
+import { fromLocalDatetimeInput } from "@/utils/date";
 import { validateCreateTodoForm } from "@/utils/validation";
 import AppButton from "@/components/common/AppButton.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
@@ -38,6 +39,20 @@ watch(
   },
 );
 
+function parseTags(text: string): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const part of text.split(/[,，\s]+/)) {
+    const tag = part.trim();
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+  }
+  return tags;
+}
+
 function handleSubmit() {
   const validationError = validateCreateTodoForm(form.value);
   if (validationError) {
@@ -56,6 +71,14 @@ function handleSubmit() {
   }
   if (form.value.priority !== "Medium") {
     dto.priority = form.value.priority;
+  }
+  const due = fromLocalDatetimeInput(form.value.dueDate);
+  if (due) {
+    dto.dueDate = due;
+  }
+  const tags = parseTags(form.value.tagsText);
+  if (tags.length) {
+    dto.tags = tags;
   }
 
   emit("submit", dto);
@@ -101,7 +124,7 @@ defineExpose({ resetSubmitting, setError });
       <textarea
         v-model="form.description"
         placeholder="可选，补充任务详情"
-        rows="4"
+        rows="3"
         maxlength="5000"
       />
     </label>
@@ -113,6 +136,16 @@ defineExpose({ resetSubmitting, setError });
           {{ PRIORITY_LABELS[p] }}
         </option>
       </select>
+    </label>
+
+    <label class="app-field">
+      <span>截止日期</span>
+      <input v-model="form.dueDate" type="datetime-local" />
+    </label>
+
+    <label class="app-field">
+      <span>标签</span>
+      <input v-model="form.tagsText" type="text" placeholder="可选，逗号分隔" />
     </label>
 
     <div class="app-modal-actions">

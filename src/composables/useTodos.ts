@@ -3,14 +3,18 @@ import { ref, type Ref } from "vue";
 import * as todoApi from "@/api/todos";
 import type {
   CreateTodoDto,
-  DueDateFilter,
   ListTodoQuery,
-  Priority,
+  SortBy,
+  SortOrder,
   TodoDto,
-  TodoStatus,
+  WorkbenchView,
 } from "@/api/types";
 import { formatErrorMessage } from "@/utils/error";
 import { dueDateRangeForFilter } from "@/utils/date";
+import { sortTodos } from "@/utils/listSort";
+
+/** 今日视图双查询各自上限（合并去重后可能少于 2×limit） */
+const TODAY_FETCH_LIMIT = 100;
 
 export interface UseTodosReturn {
   todos: Ref<TodoDto[]>;
@@ -20,20 +24,28 @@ export interface UseTodosReturn {
   loading: Ref<boolean>;
   error: Ref<string | null>;
   keyword: Ref<string>;
-  selectedStatuses: Ref<TodoStatus[]>;
-  selectedPriorities: Ref<Priority[]>;
-  selectedTags: Ref<string[]>;
-  dueDateFilter: Ref<DueDateFilter>;
+  view: Ref<WorkbenchView>;
+  activeTag: Ref<string | null>;
+  sortBy: Ref<SortBy>;
+  sortOrder: Ref<SortOrder>;
   selectedId: Ref<string | null>;
   fetchTodos: () => Promise<void>;
   createTodo: (dto: CreateTodoDto) => Promise<TodoDto>;
   selectTodo: (id: string | null) => Promise<void>;
-  toggleStatusFilter: (status: TodoStatus) => void;
-  togglePriorityFilter: (priority: Priority) => void;
-  toggleTagFilter: (tag: string) => void;
-  setDueDateFilter: (filter: DueDateFilter) => void;
+  setView: (next: WorkbenchView, tag?: string | null) => void;
+  setSort: (sortBy: SortBy, sortOrder?: SortOrder) => void;
   search: () => Promise<void>;
   goToPage: (nextPage: number) => Promise<void>;
+}
+
+function mergeById(lists: TodoDto[][]): TodoDto[] {
+  const map = new Map<string, TodoDto>();
+  for (const list of lists) {
+    for (const item of list) {
+      map.set(item.id, item);
+    }
+  }
+  return [...map.values()];
 }
 
 export function useTodos(): UseTodosReturn {
@@ -44,51 +56,138 @@ export function useTodos(): UseTodosReturn {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const keyword = ref("");
-  const selectedStatuses = ref<TodoStatus[]>([]);
-  const selectedPriorities = ref<Priority[]>([]);
-  const selectedTags = ref<string[]>([]);
-  const dueDateFilter = ref<DueDateFilter>("all");
+  const view = ref<WorkbenchView>("today");
+  const activeTag = ref<string | null>(null);
+  const sortBy = ref<SortBy>("priority");
+  const sortOrder = ref<SortOrder>("desc");
   const selectedId = ref<string | null>(null);
   let listGen = 0;
+
+  function baseQuery(): ListTodoQuery {
+    const query: ListTodoQuery = {
+      page: page.value,
+      pageSize: pageSize.value,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
+      includeArchived: false,
+      includeDeleted: false,
+    };
+    if (keyword.value.trim()) {
+      query.keyword = keyword.value.trim();
+    }
+    return query;
+  }
 
   async function fetchTodos(): Promise<void> {
     const gen = ++listGen;
     loading.value = true;
     error.value = null;
     try {
-      const query: ListTodoQuery = {
-        page: page.value,
-        pageSize: pageSize.value,
-        sortBy: "priority",
-        sortOrder: "desc",
-        includeArchived: false,
-      };
-      if (keyword.value.trim()) {
-        query.keyword = keyword.value.trim();
-      }
-      if (selectedStatuses.value.length > 0) {
-        query.status = [...selectedStatuses.value];
-        query.includeArchived = selectedStatuses.value.includes("Archived");
-      } else if (dueDateFilter.value === "overdue" || dueDateFilter.value === "today") {
-        // 与角标计数一致：仅活跃 Todo/Doing
-        query.status = ["Todo", "Doing"];
-      }
-      if (selectedPriorities.value.length > 0) {
-        query.priority = [...selectedPriorities.value];
-      }
-      if (selectedTags.value.length > 0) {
-        query.tags = [...selectedTags.value];
-      }
-      const dueRange = dueDateRangeForFilter(dueDateFilter.value);
-      if (dueRange.after) query.dueDateAfter = dueRange.after;
-      if (dueRange.before) query.dueDateBefore = dueRange.before;
+      let items: TodoDto[] = [];
+      let resultTotal = 0;
+      let resultPage = page.value;
 
-      const result = await todoApi.listTodos(query);
-      if (gen !== listGen) return;
-      todos.value = result.items;
-      total.value = result.total;
-      page.value = result.page;
-      pageSize.value = result.pageSize;
+      if (view.value === "today") {
+        const dueRange = dueDateRangeForFilter("today");
+        const dueQuery: ListTodoQuery = {
+          ...baseQuery(),
+          status: ["Todo", "Doing"],
+          dueDateAfter: dueRange.after,
+          dueDateBefore: dueRange.before,
+          page: 1,
+          pageSize: TODAY_FETCH_LIMIT,
+        };
+        const doingQuery: ListTodoQuery = {
+          ...baseQuery(),
+          status: ["Doing"],
+          page: 1,
+          pageSize: TODAY_FETCH_LIMIT,
+        };
+        const [dueResult, doingResult] = await Promise.all([
+          todoApi.listTodos(dueQuery),
+          todoApi.listTodos(doingQuery),
+        ]);
+        if (gen !== listGen) return;
+        items = sortTodos(
+          mergeById([dueResult.items, doingResult.items]),
+          sortBy.value,
+          sortOrder.value,
+        );
+        resultTotal = items.length;
+        resultPage = 1;
+      } else if (view.value === "overdue") {
+        const dueRange = dueDateRangeForFilter("overdue");
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          status: ["Todo", "Doing"],
+          dueDateBefore: dueRange.before,
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      } else if (view.value === "doing") {
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          status: ["Doing"],
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      } else if (view.value === "all") {
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          status: ["Todo", "Doing"],
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      } else if (view.value === "done") {
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          status: ["Done"],
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      } else if (view.value === "archived") {
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          status: ["Archived"],
+          includeArchived: true,
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      } else if (view.value === "trash") {
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          includeDeleted: true,
+          includeArchived: true,
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      } else {
+        const result = await todoApi.listTodos({
+          ...baseQuery(),
+          status: ["Todo", "Doing"],
+          tags: activeTag.value ? [activeTag.value] : undefined,
+        });
+        if (gen !== listGen) return;
+        items = result.items;
+        resultTotal = result.total;
+        resultPage = result.page;
+      }
+
+      todos.value = items;
+      total.value = resultTotal;
+      page.value = resultPage;
     } catch (err) {
       if (gen !== listGen) return;
       error.value = formatErrorMessage(err);
@@ -110,41 +209,16 @@ export function useTodos(): UseTodosReturn {
     selectedId.value = id;
   }
 
-  function toggleStatusFilter(status: TodoStatus): void {
-    const index = selectedStatuses.value.indexOf(status);
-    if (index >= 0) {
-      selectedStatuses.value.splice(index, 1);
-    } else {
-      selectedStatuses.value.push(status);
-    }
+  function setView(next: WorkbenchView, tag: string | null = null): void {
+    view.value = next;
+    activeTag.value = next === "tag" ? tag : null;
     page.value = 1;
     void fetchTodos();
   }
 
-  function togglePriorityFilter(priority: Priority): void {
-    const index = selectedPriorities.value.indexOf(priority);
-    if (index >= 0) {
-      selectedPriorities.value.splice(index, 1);
-    } else {
-      selectedPriorities.value.push(priority);
-    }
-    page.value = 1;
-    void fetchTodos();
-  }
-
-  function toggleTagFilter(tag: string): void {
-    const index = selectedTags.value.indexOf(tag);
-    if (index >= 0) {
-      selectedTags.value.splice(index, 1);
-    } else {
-      selectedTags.value.push(tag);
-    }
-    page.value = 1;
-    void fetchTodos();
-  }
-
-  function setDueDateFilter(filter: DueDateFilter): void {
-    dueDateFilter.value = filter;
+  function setSort(nextSortBy: SortBy, nextOrder: SortOrder = sortOrder.value): void {
+    sortBy.value = nextSortBy;
+    sortOrder.value = nextOrder;
     page.value = 1;
     void fetchTodos();
   }
@@ -170,18 +244,16 @@ export function useTodos(): UseTodosReturn {
     loading,
     error,
     keyword,
-    selectedStatuses,
-    selectedPriorities,
-    selectedTags,
-    dueDateFilter,
+    view,
+    activeTag,
+    sortBy,
+    sortOrder,
     selectedId,
     fetchTodos,
     createTodo,
     selectTodo,
-    toggleStatusFilter,
-    togglePriorityFilter,
-    toggleTagFilter,
-    setDueDateFilter,
+    setView,
+    setSort,
     search,
     goToPage,
   };

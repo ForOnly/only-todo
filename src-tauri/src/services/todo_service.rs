@@ -69,13 +69,9 @@ impl TodoService {
         Ok(todo.into())
     }
 
+    /// 含软删任务（回收站 Inspector）；update/transition 仍拒软删。
     pub fn get(db: &Database, id: &str) -> Result<TodoDto, AppError> {
         let todo = TodoRepository::get_by_id(db, id)?;
-        if todo.deleted_at.is_some() {
-            return Err(AppError::NotFound {
-                message: format!("todo {id} not found"),
-            });
-        }
         Ok(todo.into())
     }
 

@@ -1,26 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
-import type { CreateTodoDto, DueDateFilter, FloatDefaultMode, RepeatType } from "@/api/types";
-import { listAllTags } from "@/api/todos";
+import type {
+  CreateTodoDto,
+  FloatDefaultMode,
+  RepeatType,
+  SortBy,
+  TodoDto,
+  WorkbenchView,
+} from "@/api/types";
+import { listAllTags, listTodos, transitionTodo } from "@/api/todos";
 import { getSettings, updateSettings } from "@/api/settings";
+import { showFloatingWindow } from "@/api/window";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
-import FilterSidebar from "@/components/layout/FilterSidebar.vue";
 import CreateTodoModal from "@/components/todo/CreateTodoModal.vue";
-import TodoDetailDrawer from "@/components/todo/TodoDetailDrawer.vue";
-import TodoList from "@/components/todo/TodoList.vue";
+import ViewSidebar from "@/components/workbench/ViewSidebar.vue";
+import TaskListPane from "@/components/workbench/TaskListPane.vue";
+import TaskInspector from "@/components/workbench/TaskInspector.vue";
 import { TAURI_EVENTS } from "@/constants/events";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
+import { dueDateRangeForFilter } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
-import {
-  loadFilterCollapsed,
-  loadFilterPinned,
-  saveFilterCollapsed,
-  saveFilterPinned,
-} from "@/utils/filterPrefs";
+import { parseListDefaultSort } from "@/utils/listSort";
 
 const {
   todos,
@@ -30,18 +34,16 @@ const {
   loading,
   error: listError,
   keyword,
-  selectedStatuses,
-  selectedPriorities,
-  selectedTags,
-  dueDateFilter,
+  view,
+  activeTag,
+  sortBy,
+  sortOrder,
   selectedId,
   fetchTodos,
   createTodo,
   selectTodo,
-  toggleStatusFilter,
-  togglePriorityFilter,
-  toggleTagFilter,
-  setDueDateFilter,
+  setView,
+  setSort,
   search,
   goToPage,
 } = useTodos();
@@ -51,6 +53,7 @@ const {
   loading: remindersLoading,
   error: remindersError,
   addReminder,
+  updateReminder,
   removeReminder,
   snoozeReminder,
 } = useReminders(selectedId);
@@ -64,14 +67,22 @@ const {
   editTags,
   saving,
   error: detailError,
-  save,
+  scheduleAutosave,
+  flushAutosave,
+  reload,
   transitionTo,
   remove,
-} = useTodoDetail(selectedId, fetchTodos);
+  restore,
+} = useTodoDetail(selectedId, async () => {
+  await fetchTodos();
+  await refreshOverdueCount();
+  await loadTags();
+});
 
 const settingsOpen = ref(false);
 const createOpen = ref(false);
 const notificationEnabled = ref(true);
+const listDefaultSortRaw = ref('{"sort_by":"priority","sort_order":"desc"}');
 const floatAlwaysOnTop = ref(true);
 const floatVisibleCount = ref(5);
 const floatAutoShow = ref(true);
@@ -79,46 +90,59 @@ const floatDefaultMode = ref<FloatDefaultMode>("ball");
 const floatHoverPreview = ref(false);
 const autostartEnabled = ref(false);
 const allTags = ref<string[]>([]);
+const overdueCount = ref(0);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
-
-const filterCollapsed = ref(loadFilterCollapsed());
-const filterPinned = ref(loadFilterPinned());
-
-const detailOpen = computed(() => selectedId.value !== null);
+const eventUnlisteners: (() => void)[] = [];
 
 onMounted(async () => {
-  await fetchTodos();
-  await loadTags();
-
-  if (filterPinned.value) {
-    filterCollapsed.value = false;
-  }
-
   try {
     const settings = await getSettings();
     notificationEnabled.value = settings.notificationEnabled;
+    listDefaultSortRaw.value = settings.listDefaultSort;
     floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
     floatVisibleCount.value = settings.floatVisibleCount;
     floatAutoShow.value = settings.floatAutoShow;
     floatDefaultMode.value = settings.floatDefaultMode;
     floatHoverPreview.value = settings.floatHoverPreview;
     autostartEnabled.value = settings.autostartEnabled;
+    const sort = parseListDefaultSort(settings.listDefaultSort);
+    sortBy.value = sort.sortBy;
+    sortOrder.value = sort.sortOrder;
   } catch {
     // 首次启动时 settings 表可能尚未写入种子数据，忽略即可
   }
 
-  await listen<string>(TAURI_EVENTS.NAVIGATE_TO_TODO, (event) => {
-    void selectTodo(event.payload);
-  });
+  await fetchTodos();
+  await loadTags();
+  await refreshOverdueCount();
 
-  await listen(TAURI_EVENTS.CREATE_TODO, () => {
-    createOpen.value = true;
-  });
+  eventUnlisteners.push(
+    await listen<string>(TAURI_EVENTS.NAVIGATE_TO_TODO, (event) => {
+      void navigateToTodo(event.payload);
+    }),
+  );
 
-  await listen(TAURI_EVENTS.OPEN_SETTINGS, () => {
-    settingsOpen.value = true;
-  });
+  eventUnlisteners.push(
+    await listen(TAURI_EVENTS.CREATE_TODO, () => {
+      createOpen.value = true;
+    }),
+  );
+
+  eventUnlisteners.push(
+    await listen(TAURI_EVENTS.OPEN_SETTINGS, () => {
+      settingsOpen.value = true;
+    }),
+  );
+
+  window.addEventListener("keydown", onGlobalKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onGlobalKeydown);
+  for (const unlisten of eventUnlisteners) {
+    unlisten();
+  }
 });
 
 async function loadTags() {
@@ -129,42 +153,136 @@ async function loadTags() {
   }
 }
 
+async function refreshOverdueCount() {
+  try {
+    const dueRange = dueDateRangeForFilter("overdue");
+    const result = await listTodos({
+      status: ["Todo", "Doing"],
+      dueDateBefore: dueRange.before,
+      page: 1,
+      pageSize: 1,
+    });
+    overdueCount.value = result.total;
+  } catch {
+    overdueCount.value = 0;
+  }
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+}
+
+function onGlobalKeydown(event: KeyboardEvent) {
+  if (settingsOpen.value || createOpen.value) {
+    if (event.key === "Escape") {
+      settingsOpen.value = false;
+      createOpen.value = false;
+    }
+    return;
+  }
+
+  if (event.key === "Escape") {
+    if (selectedId.value) {
+      event.preventDefault();
+      void closeDetail();
+    }
+    return;
+  }
+
+  if (event.key === "/" && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    document.getElementById("workbench-search")?.focus();
+    return;
+  }
+
+  if (isTypingTarget(event.target)) return;
+
+  if (event.key === "n") {
+    event.preventDefault();
+    createOpen.value = true;
+    return;
+  }
+
+  if (event.key === "j" || event.key === "k") {
+    event.preventDefault();
+    void moveSelection(event.key === "j" ? 1 : -1);
+    return;
+  }
+
+  if (event.key === "x" && selectedId.value && !detail.value?.deletedAt) {
+    event.preventDefault();
+    void handleRemove();
+  }
+}
+
+async function moveSelection(delta: number) {
+  if (!todos.value.length) return;
+  const ids = todos.value.map((t) => t.id);
+  const current = selectedId.value ? ids.indexOf(selectedId.value) : -1;
+  let next = current + delta;
+  if (current < 0) next = delta > 0 ? 0 : ids.length - 1;
+  if (next < 0) next = 0;
+  if (next >= ids.length) next = ids.length - 1;
+  await navigateToTodo(ids[next] ?? null);
+}
+
+async function navigateToTodo(id: string | null) {
+  await flushAutosave();
+  await selectTodo(id);
+}
+
 function openCreateModal() {
   createOpen.value = true;
 }
 
-function closeDetail() {
+async function closeDetail() {
+  await flushAutosave();
   selectedId.value = null;
 }
 
-async function handleSave() {
-  const ok = await save();
-  if (ok) {
-    closeDetail();
-    await loadTags();
+async function handleSelect(id: string) {
+  if (selectedId.value === id) {
+    await closeDetail();
+    return;
+  }
+  await navigateToTodo(id);
+}
+
+async function handleToggleComplete(todo: TodoDto) {
+  try {
+    const next = todo.status === "Done" ? "Todo" : "Done";
+    await transitionTodo(todo.id, next);
+    if (selectedId.value === todo.id) {
+      await reload();
+    }
+    await fetchTodos();
+    await refreshOverdueCount();
+  } catch (err) {
+    listError.value = formatErrorMessage(err);
   }
 }
 
 async function handleRemove() {
   const ok = await remove();
   if (ok) {
-    closeDetail();
+    await refreshOverdueCount();
     await loadTags();
   }
 }
 
-function toggleFilter() {
-  if (filterPinned.value) return;
-  filterCollapsed.value = !filterCollapsed.value;
-  saveFilterCollapsed(filterCollapsed.value);
-}
-
-function toggleFilterPin() {
-  filterPinned.value = !filterPinned.value;
-  saveFilterPinned(filterPinned.value);
-  if (filterPinned.value) {
-    filterCollapsed.value = false;
-    saveFilterCollapsed(false);
+async function handleRestore() {
+  const restoredId = selectedId.value;
+  const ok = await restore();
+  if (ok && restoredId) {
+    view.value = "all";
+    activeTag.value = null;
+    page.value = 1;
+    await fetchTodos();
+    await selectTodo(restoredId);
+    await refreshOverdueCount();
+    await loadTags();
   }
 }
 
@@ -172,7 +290,9 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
   try {
     await createTodo(dto);
     createOpen.value = false;
+    createModalRef.value?.resetSubmitting();
     await loadTags();
+    await refreshOverdueCount();
   } catch (err) {
     createModalRef.value?.setError(formatErrorMessage(err));
   }
@@ -183,6 +303,16 @@ async function handleAddReminder(datetime: string, repeatType?: RepeatType) {
   reminderError.value = null;
   try {
     await addReminder(selectedId.value, datetime, repeatType);
+  } catch (err) {
+    reminderError.value = formatErrorMessage(err);
+  }
+}
+
+async function handleUpdateReminder(id: string, datetime: string) {
+  if (!selectedId.value) return;
+  reminderError.value = null;
+  try {
+    await updateReminder(id, selectedId.value, datetime);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
@@ -208,8 +338,35 @@ async function handleSnoozeReminder(id: string, minutes: number) {
   }
 }
 
+async function handleViewSelect(next: WorkbenchView, tag?: string | null) {
+  await flushAutosave();
+  setView(next, tag);
+  selectedId.value = null;
+}
+
+function handleChangeSort(next: SortBy) {
+  setSort(next);
+}
+
+function handleEmptyAction(action: "create" | "all") {
+  if (action === "create") {
+    openCreateModal();
+  } else {
+    setView("all");
+  }
+}
+
+async function handleOpenCompanion() {
+  try {
+    await showFloatingWindow();
+  } catch (err) {
+    listError.value = formatErrorMessage(err);
+  }
+}
+
 async function handleSettingsUpdate(payload: {
   notificationEnabled?: boolean;
+  listDefaultSort?: string;
   floatAlwaysOnTop?: boolean;
   floatVisibleCount?: number;
   floatAutoShow?: boolean;
@@ -219,12 +376,17 @@ async function handleSettingsUpdate(payload: {
 }) {
   const settings = await updateSettings(payload);
   notificationEnabled.value = settings.notificationEnabled;
+  listDefaultSortRaw.value = settings.listDefaultSort;
   floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
   floatVisibleCount.value = settings.floatVisibleCount;
   floatAutoShow.value = settings.floatAutoShow;
   floatDefaultMode.value = settings.floatDefaultMode;
   floatHoverPreview.value = settings.floatHoverPreview;
   autostartEnabled.value = settings.autostartEnabled;
+  if (payload.listDefaultSort) {
+    const sort = parseListDefaultSort(settings.listDefaultSort);
+    setSort(sort.sortBy, sort.sortOrder);
+  }
 }
 </script>
 
@@ -232,67 +394,66 @@ async function handleSettingsUpdate(payload: {
   <div class="app">
     <AppHeader
       v-model:keyword="keyword"
-      :filter-collapsed="filterCollapsed"
-      :filter-pinned="filterPinned"
       @search="search"
       @create="openCreateModal"
       @settings="settingsOpen = true"
-      @toggle-filter="toggleFilter"
-      @toggle-filter-pin="toggleFilterPin"
+      @open-companion="handleOpenCompanion"
     />
 
     <div class="body">
-      <FilterSidebar
-        :collapsed="filterCollapsed"
-        :selected-statuses="selectedStatuses"
-        :selected-priorities="selectedPriorities"
-        :selected-tags="selectedTags"
+      <ViewSidebar
+        :view="view"
+        :active-tag="activeTag"
         :all-tags="allTags"
-        :due-date-filter="dueDateFilter"
-        @toggle-status="toggleStatusFilter"
-        @toggle-priority="togglePriorityFilter"
-        @toggle-tag="toggleTagFilter"
-        @set-due-date-filter="setDueDateFilter"
+        :overdue-count="overdueCount"
+        @select-view="handleViewSelect"
       />
 
-      <main class="main-content">
-        <TodoList
-          :todos="todos"
-          :selected-id="selectedId"
-          :loading="loading"
-          :total="total"
-          :page="page"
-          :page-size="pageSize"
-          @select="selectTodo"
-          @prev-page="goToPage(page - 1)"
-          @next-page="goToPage(page + 1)"
-        />
-      </main>
+      <TaskListPane
+        :todos="todos"
+        :selected-id="selectedId"
+        :loading="loading"
+        :total="total"
+        :page="page"
+        :page-size="pageSize"
+        :view="view"
+        :active-tag="activeTag"
+        :sort-by="sortBy"
+        :sort-order="sortOrder"
+        @select="handleSelect"
+        @toggle-complete="handleToggleComplete"
+        @prev-page="goToPage(page - 1)"
+        @next-page="goToPage(page + 1)"
+        @change-sort="handleChangeSort"
+        @empty-action="handleEmptyAction"
+      />
+
+      <TaskInspector
+        :detail="detail"
+        v-model:edit-title="editTitle"
+        v-model:edit-description="editDescription"
+        v-model:edit-priority="editPriority"
+        v-model:edit-due-date="editDueDate"
+        v-model:edit-tags="editTags"
+        :saving="saving"
+        :error="detailError"
+        :reminders="reminders"
+        :reminders-loading="remindersLoading"
+        :reminders-error="remindersError ?? reminderError"
+        :suggested-tags="allTags"
+        @field-change="scheduleAutosave"
+        @close="closeDetail"
+        @transition="transitionTo"
+        @remove="handleRemove"
+        @restore="handleRestore"
+        @add-reminder="handleAddReminder"
+        @update-reminder="handleUpdateReminder"
+        @remove-reminder="handleRemoveReminder"
+        @snooze-reminder="handleSnoozeReminder"
+      />
     </div>
 
     <p v-if="listError" class="global-error">{{ listError }}</p>
-
-    <TodoDetailDrawer
-      :open="detailOpen"
-      :detail="detail"
-      v-model:edit-title="editTitle"
-      v-model:edit-description="editDescription"
-      v-model:edit-priority="editPriority"
-      v-model:edit-due-date="editDueDate"
-      v-model:edit-tags="editTags"
-      :saving="saving"
-      :error="detailError"
-      :reminders="reminders"
-      :reminders-loading="remindersLoading"
-      :reminders-error="remindersError ?? reminderError"
-      @close="closeDetail"
-      @save="handleSave"
-      @transition="transitionTo"
-      @remove="handleRemove"
-      @add-reminder="handleAddReminder"
-      @remove-reminder="handleRemoveReminder"
-      @snooze-reminder="handleSnoozeReminder"
-    />
 
     <CreateTodoModal
       ref="createModalRef"
@@ -304,6 +465,7 @@ async function handleSettingsUpdate(payload: {
     <SettingsModal
       :open="settingsOpen"
       :notification-enabled="notificationEnabled"
+      :list-default-sort="listDefaultSortRaw"
       :float-always-on-top="floatAlwaysOnTop"
       :float-visible-count="floatVisibleCount"
       :float-auto-show="floatAutoShow"
@@ -329,9 +491,9 @@ body,
 }
 
 body {
-  font-family: Inter, system-ui, sans-serif;
-  color: #111827;
-  background: #f3f4f6;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: #0f172a;
+  background: #eef2f7;
 }
 </style>
 
@@ -340,19 +502,18 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background:
+    radial-gradient(1200px 400px at 10% -10%, rgba(15, 23, 42, 0.06), transparent 60%),
+    #eef2f7;
 }
 
 .body {
   display: flex;
   flex: 1;
   min-height: 0;
-}
-
-.main-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  margin: 0;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
 }
 
 .global-error {

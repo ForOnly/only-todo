@@ -9,13 +9,13 @@ import {
   REPEAT_TYPE_LABELS,
   REPEAT_TYPE_OPTIONS,
   STATUS_LABELS,
-  STATUS_OPTIONS,
   type ReminderDto,
   type RepeatType,
   type TodoDto,
   type TodoStatus,
 } from "@/api/types";
 import { formatDate } from "@/utils/date";
+import { statusActionsFor } from "@/utils/statusActions";
 
 defineProps<{
   detail: TodoDto;
@@ -107,15 +107,15 @@ function submitReminder() {
     </label>
 
     <div class="status-row">
-      <span>状态</span>
+      <span>状态 · {{ STATUS_LABELS[detail.status] }}</span>
       <div class="status-buttons">
         <AppButton
-          v-for="status in STATUS_OPTIONS"
-          :key="status"
-          :variant="detail.status === status ? 'primary' : 'ghost'"
-          @click="emit('transition', status)"
+          v-for="action in statusActionsFor(detail.status)"
+          :key="action.target"
+          :variant="action.target === 'Done' ? 'primary' : 'ghost'"
+          @click="emit('transition', action.target)"
         >
-          {{ STATUS_LABELS[status] }}
+          {{ action.label }}
         </AppButton>
       </div>
     </div>

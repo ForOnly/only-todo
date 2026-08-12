@@ -47,6 +47,10 @@ export interface CreateTodoFormModel {
   title: string;
   description: string;
   priority: Priority;
+  /** datetime-local 字符串；空表示无截止日期 */
+  dueDate: string;
+  /** 逗号或空格分隔前的原始输入，提交时拆成 tags */
+  tagsText: string;
 }
 
 export interface UpdateTodoDto {
@@ -58,6 +62,16 @@ export interface UpdateTodoDto {
   tags?: string[];
 }
 
+export type WorkbenchView =
+  | "today"
+  | "overdue"
+  | "doing"
+  | "all"
+  | "done"
+  | "archived"
+  | "trash"
+  | "tag";
+
 export interface ListTodoQuery {
   status?: TodoStatus[];
   priority?: Priority[];
@@ -66,6 +80,7 @@ export interface ListTodoQuery {
   dueDateBefore?: string;
   dueDateAfter?: string;
   includeArchived?: boolean;
+  includeDeleted?: boolean;
   sortBy?: SortBy;
   sortOrder?: SortOrder;
   page?: number;
@@ -181,6 +196,8 @@ export const DEFAULT_CREATE_TODO_FORM = (): CreateTodoFormModel => ({
   title: "",
   description: "",
   priority: "Medium",
+  dueDate: "",
+  tagsText: "",
 });
 
 export const TITLE_MAX_LENGTH = 200;
