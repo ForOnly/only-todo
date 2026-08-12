@@ -69,10 +69,10 @@ function save() {
     </section>
 
     <section class="group">
-      <h3>悬浮窗</h3>
+      <h3>伴侣</h3>
       <label class="setting-row">
         <input v-model="localAlwaysOnTop" type="checkbox" />
-        <span>窗口置顶</span>
+        <span>伴侣始终置顶</span>
       </label>
       <label class="setting-row">
         <input v-model="localAutoShow" type="checkbox" />
@@ -86,14 +86,15 @@ function save() {
             <option value="panel">面板</option>
           </select>
         </label>
-        <p class="hint">小圆球为日常气泡，− 回到圆球；面板为迷你窗，− 贴到边缘。</p>
+        <p class="hint">小圆球为日常气泡，− 回到圆球；面板为迷你窗，− 贴到边缘。贴边后 − 收成条。</p>
       </div>
       <label class="setting-row">
         <input v-model="localHoverPreview" type="checkbox" />
         <span>贴边悬停预览</span>
       </label>
+      <p class="hint">默认关。悬停约 0.4s 预览，离开约 0.3s 收起；单击预览可钉住。</p>
       <label class="setting-row">
-        <span>显示条数</span>
+        <span>伴侣列表条数</span>
         <input
           v-model.number="localVisibleCount"
           type="number"

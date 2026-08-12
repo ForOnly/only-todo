@@ -3,7 +3,12 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
 import type { CompanionSession } from "@/api/types";
-import { companionClickChrome, companionPointerCluster, getCompanionSession } from "@/api/window";
+import {
+  companionClickChrome,
+  companionMinimize,
+  companionPointerCluster,
+  getCompanionSession,
+} from "@/api/window";
 import FloatBall from "@/components/float/FloatBall.vue";
 import FloatDockStrip from "@/components/float/FloatDockStrip.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
@@ -44,9 +49,21 @@ async function onLeave() {
   }
 }
 
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== "Escape") return;
+  const current = session.value;
+  if (!current || current.visibility !== "shown") return;
+  if (current.panelMode === "preview" || current.panelMode === "pinned") {
+    void companionMinimize().then(applySession).catch((err) => {
+      console.error("chrome minimize failed", err);
+    });
+  }
+}
+
 onMounted(async () => {
   document.addEventListener("pointerup", onPointerUp, true);
   document.addEventListener("pointercancel", onPointerUp, true);
+  window.addEventListener("keydown", onKeydown);
   unlistenSession = await listen<CompanionSession>(TAURI_EVENTS.FLOAT_SESSION_CHANGED, (event) =>
     applySession(event.payload),
   );
@@ -60,6 +77,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener("pointerup", onPointerUp, true);
   document.removeEventListener("pointercancel", onPointerUp, true);
+  window.removeEventListener("keydown", onKeydown);
   unlistenSession?.();
 });
 </script>

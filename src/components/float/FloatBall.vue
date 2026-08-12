@@ -11,7 +11,7 @@ const emit = defineEmits<{
   "drag-start": [];
 }>();
 
-const DRAG_THRESHOLD = 5;
+const DRAG_THRESHOLD = 10;
 
 let pointerId: number | null = null;
 let startX = 0;
@@ -27,6 +27,12 @@ const urgencyClass = computed(() => {
 const badge = computed(() => {
   if (props.activeCount <= 0) return "";
   return props.activeCount > 99 ? "99+" : String(props.activeCount);
+});
+
+const tooltip = computed(() => {
+  const parts = [`${props.activeCount} 待办`];
+  if (props.overdueCount > 0) parts.push(`${props.overdueCount} 逾期`);
+  return `${parts.join(" · ")} · 单击打开，拖到边缘可贴边`;
 });
 
 function onPointerDown(event: PointerEvent) {
@@ -67,16 +73,28 @@ function onPointerUp(event: PointerEvent) {
     emit("click");
   }
 }
+
+function onPointerCancel(event: PointerEvent) {
+  if (pointerId !== event.pointerId) return;
+  pointerId = null;
+  moved = false;
+  try {
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  } catch {
+    // ignore
+  }
+}
 </script>
 
 <template>
   <button
     type="button"
     class="float-ball-host"
+    :title="tooltip"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
+    @pointercancel="onPointerCancel"
   >
     <div class="float-ball" :class="urgencyClass">
       <span v-if="badge" class="badge">{{ badge }}</span>
@@ -91,7 +109,7 @@ function onPointerUp(event: PointerEvent) {
   padding: 0;
   border: none;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -100,8 +118,8 @@ function onPointerUp(event: PointerEvent) {
 }
 
 .float-ball {
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background: #2563eb;
   box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
@@ -111,6 +129,7 @@ function onPointerUp(event: PointerEvent) {
   color: #fff;
   font-size: 14px;
   font-weight: 600;
+  font-family: system-ui, sans-serif;
 }
 
 .float-ball.urgency-active {

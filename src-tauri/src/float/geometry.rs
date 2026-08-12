@@ -31,6 +31,20 @@ pub fn work_area_logical(window: &WebviewWindow) -> Result<(f64, f64, f64, f64),
     ))
 }
 
+pub fn inner_window_size(window: &WebviewWindow) -> Result<(f64, f64), AppError> {
+    let scale = window
+        .scale_factor()
+        .map_err(|error| AppError::InternalError {
+            message: error.to_string(),
+        })?;
+    let size = window
+        .inner_size()
+        .map_err(|error| AppError::InternalError {
+            message: error.to_string(),
+        })?;
+    Ok((size.width as f64 / scale, size.height as f64 / scale))
+}
+
 pub fn current_window_bounds(window: &WebviewWindow) -> Result<WindowBounds, AppError> {
     let scale = window
         .scale_factor()
@@ -140,9 +154,10 @@ pub fn body_beside_handle(
     clamp_panel_size(&mut bounds, work_w, work_h);
     let max_y = (work_y + work_h - bounds.height).max(work_y);
     bounds.y = (handle.y + handle.height / 2.0 - bounds.height / 2.0).clamp(work_y, max_y);
+    // 按视觉条宽让位，与加宽 HWND 重叠；透明区点击穿透后点到面板
     bounds.x = match edge {
-        DockEdge::Left => handle.x + handle.width,
-        DockEdge::Right => (handle.x - bounds.width).max(work_x),
+        DockEdge::Left => work_x + HANDLE_WIDTH,
+        DockEdge::Right => (work_x + work_w - HANDLE_WIDTH - bounds.width).max(work_x),
     };
     bounds
 }
@@ -174,6 +189,30 @@ pub fn detect_nearest_edge(window: &WebviewWindow) -> Option<DockEdge> {
     let bounds = current_window_bounds(window).ok()?;
     let work = work_area_logical(window).ok()?;
     nearest_edge_of(&bounds, work, EDGE_THRESHOLD)
+}
+
+/// 贴边条视觉命中：外缘 16×48 + 内侧计数徽章
+pub fn strip_visual_hit(bounds: &WindowBounds, edge: DockEdge, cx: f64, cy: f64) -> bool {
+    let bar_h = HANDLE_HEIGHT.min(bounds.height);
+    let y0 = bounds.y + ((bounds.height - bar_h) / 2.0).max(0.0);
+    if cy < y0 || cy > y0 + bar_h {
+        return false;
+    }
+    let badge = 20.0;
+    match edge {
+        DockEdge::Left => cx >= bounds.x && cx <= bounds.x + HANDLE_WIDTH + badge,
+        DockEdge::Right => {
+            cx >= bounds.x + bounds.width - HANDLE_WIDTH - badge && cx <= bounds.x + bounds.width
+        }
+    }
+}
+
+/// 圆球视觉命中：HWND 内切圆，四角穿透
+pub fn ball_visual_hit(bounds: &WindowBounds, cx: f64, cy: f64) -> bool {
+    let radius = (bounds.width.min(bounds.height) / 2.0 - 2.0).max(24.0);
+    let mx = bounds.x + bounds.width / 2.0;
+    let my = bounds.y + bounds.height / 2.0;
+    (cx - mx).hypot(cy - my) <= radius
 }
 
 pub fn dock_threshold(chrome_width: f64) -> f64 {

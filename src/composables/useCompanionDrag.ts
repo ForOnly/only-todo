@@ -4,7 +4,7 @@ import { onUnmounted } from "vue";
 import { companionDragEnded } from "@/api/window";
 import type { CompanionSurface } from "@/api/types";
 
-const DRAG_SETTLE_MS = 180;
+const DRAG_SETTLE_MS = 100;
 const DRAG_SAFETY_MS = 3000;
 
 /** native startDragging 后 WebView 常丢 pointerup；Moved 静止后再通知 Host */

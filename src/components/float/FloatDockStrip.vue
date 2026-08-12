@@ -16,7 +16,7 @@ const emit = defineEmits<{
   leave: [];
 }>();
 
-const DRAG_THRESHOLD = 5;
+const DRAG_THRESHOLD = 10;
 
 let pointerId: number | null = null;
 let startX = 0;
@@ -32,6 +32,12 @@ const urgencyClass = computed(() => {
 const badge = computed(() => {
   if (props.activeCount <= 0) return "";
   return props.activeCount > 99 ? "99+" : String(props.activeCount);
+});
+
+const tooltip = computed(() => {
+  const parts = [`${props.activeCount} 待办`];
+  if (props.overdueCount > 0) parts.push(`${props.overdueCount} 逾期`);
+  return `${parts.join(" · ")} · 单击打开，拖到边缘可贴边`;
 });
 
 function onPointerDown(event: PointerEvent) {
@@ -72,37 +78,47 @@ function onPointerUp(event: PointerEvent) {
     emit("click");
   }
 }
+
+function onPointerCancel(event: PointerEvent) {
+  if (pointerId !== event.pointerId) return;
+  pointerId = null;
+  moved = false;
+  try {
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  } catch {
+    // ignore
+  }
+}
 </script>
 
 <template>
-  <button
-    type="button"
+  <div
     class="dock-strip"
     :class="[`edge-${edge}`, urgencyClass]"
+    :title="tooltip"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
-    @pointercancel="onPointerUp"
+    @pointercancel="onPointerCancel"
     @mouseenter="emit('enter')"
     @mouseleave="emit('leave')"
   >
     <span class="dock-strip-bar">
       <span v-if="badge" class="count">{{ badge }}</span>
     </span>
-  </button>
+  </div>
 </template>
 
 <style scoped>
 .dock-strip {
   width: 100%;
   height: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
   display: flex;
-  cursor: pointer;
+  align-items: center;
+  cursor: grab;
   user-select: none;
   touch-action: none;
+  background: transparent;
 }
 
 .edge-left {
@@ -115,23 +131,21 @@ function onPointerUp(event: PointerEvent) {
 
 .dock-strip-bar {
   width: 16px;
-  height: 100%;
+  height: 48px;
   flex: 0 0 16px;
   background: #2563eb;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
 }
 
 .edge-left .dock-strip-bar {
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 8px 8px 0;
 }
 
 .edge-right .dock-strip-bar {
-  border-radius: 4px 0 0 4px;
+  border-radius: 8px 0 0 8px;
 }
 
 .urgency-active .dock-strip-bar {
@@ -143,9 +157,25 @@ function onPointerUp(event: PointerEvent) {
 }
 
 .count {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  letter-spacing: 0.04em;
-  line-height: 1;
+  position: absolute;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #111827;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+}
+
+.edge-left .count {
+  left: 10px;
+}
+
+.edge-right .count {
+  right: 10px;
 }
 </style>

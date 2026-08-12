@@ -28,6 +28,7 @@
         "resizable": false,
         "alwaysOnTop": true,
         "visible": false,
+        "focus": false,
         "skipTaskbar": true
       },
       {
@@ -40,6 +41,7 @@
         "shadow": false,
         "alwaysOnTop": true,
         "visible": false,
+        "focus": false,
         "skipTaskbar": true
       }
     ],

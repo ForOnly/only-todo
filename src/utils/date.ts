@@ -1,4 +1,4 @@
-import type { DueDateFilter } from "@/api/types";
+import type { DueDateFilter, TodoStatus } from "@/api/types";
 
 /** 将 ISO 时间格式化为列表/详情展示用字符串 */
 export function formatDate(value: string): string {
@@ -20,6 +20,12 @@ export function formatDateTime(value: string): string {
 export function formatDueDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleDateString();
+}
+
+export function isOverdue(dueDate: string | null, status: TodoStatus): boolean {
+  if (!dueDate) return false;
+  if (status === "Done" || status === "Archived") return false;
+  return new Date(dueDate).getTime() < Date.now();
 }
 
 /** datetime-local 输入值 ↔ ISO */

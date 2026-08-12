@@ -195,6 +195,7 @@ fn setup_companion_windows(app: &tauri::AppHandle) -> Result<(), Box<dyn std::er
             });
         }
     }
+    float::start_chrome_hit_test(app);
     Ok(())
 }
 

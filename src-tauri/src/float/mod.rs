@@ -13,6 +13,15 @@ pub const CHROME_LABEL: &str = "float-chrome";
 pub const BODY_LABEL: &str = "float-body";
 pub const SESSION_EVENT: &str = "float-session-changed";
 
+/// chrome 透明区点击穿透：轮询光标是否落在圆/条视觉区内
+pub fn start_chrome_hit_test(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(32));
+        let _ = host::update_chrome_click_through(&app);
+    });
+}
+
 pub fn update_tray_tooltip(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;

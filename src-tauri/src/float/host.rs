@@ -15,10 +15,11 @@ use crate::services::todo_service::TodoService;
 use crate::state::AppState;
 
 use super::geometry::{
-    body_beside_handle, clamp_panel_in_work, closer_vertical_edge, current_window_bounds,
-    detect_nearest_edge, dock_drag_outcome, dock_threshold, handle_bounds, os_primary_mouse_down,
-    panel_from_ball, snap_ball_to_work_area, snap_handle_to_work_area, window_lost,
-    work_area_logical, DockDragOutcome, BALL_SIZE, HANDLE_HEIGHT, PANEL_DEFAULT_H, PANEL_DEFAULT_W,
+    ball_visual_hit, body_beside_handle, clamp_panel_in_work, closer_vertical_edge,
+    current_window_bounds, detect_nearest_edge, dock_drag_outcome, dock_threshold, handle_bounds,
+    inner_window_size, os_primary_mouse_down, panel_from_ball, snap_ball_to_work_area,
+    snap_handle_to_work_area, strip_visual_hit, window_lost, work_area_logical, DockDragOutcome,
+    BALL_SIZE, HANDLE_HEIGHT, PANEL_DEFAULT_H, PANEL_DEFAULT_W,
 };
 use super::surfaces::{
     apply_bounds, apply_position, body_window, chrome_window, hide_window, set_always_on_top,
@@ -46,6 +47,11 @@ pub struct FloatHost {
     runtime: Mutex<RuntimeState>,
     applying: AtomicBool,
     apply_gen: AtomicU64,
+    /// 仅用户点开/钉住时聚焦面板
+    focus_body_once: AtomicBool,
+    last_aot: Mutex<Option<bool>>,
+    chrome_ignore: AtomicBool,
+    chrome_hit: Mutex<Option<(ChromeKind, DockEdge)>>,
 }
 
 impl Default for FloatHost {
@@ -72,6 +78,10 @@ impl FloatHost {
             }),
             applying: AtomicBool::new(false),
             apply_gen: AtomicU64::new(0),
+            focus_body_once: AtomicBool::new(false),
+            last_aot: Mutex::new(None),
+            chrome_ignore: AtomicBool::new(false),
+            chrome_hit: Mutex::new(None),
         }
     }
 
@@ -80,6 +90,13 @@ impl FloatHost {
     }
 
     pub fn show(app: &AppHandle) -> Result<CompanionSession, AppError> {
+        if companion_is_shown(app) && !companion_lost(app) {
+            {
+                let host = host_state(app)?;
+                lock_runtime(&host)?.visibility = CompanionVisibility::Shown;
+            }
+            return snapshot(app);
+        }
         {
             let state = app_state(app)?;
             let db = &state.db;
@@ -103,11 +120,16 @@ impl FloatHost {
     }
 
     pub fn hide(app: &AppHandle) -> Result<CompanionSession, AppError> {
+        let state = app_state(app)?;
+        let db = &state.db;
+        let home = SettingsRepository::get_home_shape(db)?;
+        let docked = SettingsRepository::get_placement(db)? == CompanionPlacement::Docked;
+        if home == HomeShape::Ball {
+            persist_body_size_only(app).ok();
+        } else if !docked {
+            persist_body_bounds(app).ok();
+        }
         {
-            let state = app_state(app)?;
-            let db = &state.db;
-            let home = SettingsRepository::get_home_shape(db)?;
-            let docked = SettingsRepository::get_placement(db)? == CompanionPlacement::Docked;
             let host = host_state(app)?;
             let mut rt = lock_runtime(&host)?;
             rt.visibility = CompanionVisibility::Hidden;
@@ -140,7 +162,11 @@ impl FloatHost {
                 rt.visibility = CompanionVisibility::Shown;
                 rt.panel_mode = match rt.panel_mode {
                     PanelMode::Pinned => PanelMode::Closed,
-                    PanelMode::Closed | PanelMode::Preview => PanelMode::Pinned,
+                    PanelMode::Closed => {
+                        host.focus_body_once.store(true, Ordering::SeqCst);
+                        PanelMode::Pinned
+                    }
+                    PanelMode::Preview => PanelMode::Pinned,
                 };
             }
             CompanionPlacement::Free => {
@@ -160,6 +186,7 @@ impl FloatHost {
                 let placed = panel_from_ball(work, &ball, &panel);
                 persist_panel_size(db, placed.width, placed.height)?;
                 let host = host_state(app)?;
+                host.focus_body_once.store(true, Ordering::SeqCst);
                 let mut rt = lock_runtime(&host)?;
                 rt.visibility = CompanionVisibility::Shown;
                 rt.panel_mode = PanelMode::Pinned;
@@ -311,7 +338,7 @@ impl FloatHost {
 
     pub fn on_settings_updated(app: &AppHandle, home_changed: bool) -> Result<(), AppError> {
         let always = SettingsService::float_always_on_top(&app_state(app)?.db).unwrap_or(true);
-        set_always_on_top(app, always);
+        apply_always_on_top(app, always);
         let hover = SettingsRepository::get_hover_preview(&app_state(app)?.db)?;
         let mut need_apply = false;
         {
@@ -323,8 +350,12 @@ impl FloatHost {
             }
         }
         if home_changed {
+            let docked = SettingsRepository::get_placement(&app_state(app)?.db)?
+                == CompanionPlacement::Docked;
             apply_home_shape_change(app)?;
-            need_apply = true;
+            if !docked {
+                need_apply = true;
+            }
         }
         if need_apply && companion_is_shown(app) {
             apply_and_emit(app)?;
@@ -344,11 +375,7 @@ impl FloatHost {
         let placement = SettingsRepository::get_placement(db)?;
         let home = SettingsRepository::get_home_shape(db)?;
         if placement != CompanionPlacement::Free {
-            if let Some(body) = body_window(app) {
-                if body.is_visible().unwrap_or(false) {
-                    persist_body_size_only(app)?;
-                }
-            }
+            follow_chrome_y_to_body(app).ok();
             return Ok(());
         }
         if home == HomeShape::Ball {
@@ -534,9 +561,7 @@ fn dock_from_body_minimize(app: &AppHandle) -> Result<(), AppError> {
         .as_ref()
         .map(|b| b.y + b.height / 2.0 - HANDLE_HEIGHT / 2.0)
         .unwrap_or_else(|| SettingsRepository::get_dock_y(db).unwrap_or(100.0));
-    if let Some(saved) = bounds {
-        SettingsRepository::set_panel_bounds(db, &saved)?;
-    }
+    persist_body_bounds(app).ok();
     SettingsRepository::set_placement(db, CompanionPlacement::Docked)?;
     SettingsRepository::set_dock_edge(db, edge)?;
     SettingsRepository::set_dock_y(db, y)?;
@@ -552,6 +577,7 @@ fn dock_at(app: &AppHandle, edge: DockEdge, y: f64) -> Result<(), AppError> {
     let mut rt = lock_runtime(&host)?;
     rt.visibility = CompanionVisibility::Shown;
     rt.panel_mode = PanelMode::Closed;
+    rt.temp_body_bounds = None;
     Ok(())
 }
 
@@ -588,8 +614,8 @@ fn undock_to_home(app: &AppHandle, drop: &WindowBounds) -> Result<(), AppError> 
                 width: PANEL_DEFAULT_W,
                 height: PANEL_DEFAULT_H,
             });
-            panel.x = drop.x;
-            panel.y = drop.y;
+            panel.x = drop.x + drop.width / 2.0 - panel.width / 2.0;
+            panel.y = drop.y + drop.height / 2.0 - panel.height / 2.0;
             clamp_panel_in_work(work, &mut panel);
             SettingsRepository::set_panel_bounds(db, &panel)?;
             let host = host_state(app)?;
@@ -644,31 +670,10 @@ fn drag_body_ended(app: &AppHandle) -> Result<(), AppError> {
     };
     let placement = SettingsRepository::get_placement(db)?;
     if placement == CompanionPlacement::Docked {
-        let edge = SettingsRepository::get_dock_edge(db)?;
-        let current = current_window_bounds(&body)?;
-        let work = work_area_logical(&body)?;
-        let chrome_w = chrome_window(app)
-            .and_then(|window| current_window_bounds(&window).ok())
-            .map(|b| b.width)
-            .unwrap_or(HANDLE_HEIGHT);
-        let threshold = dock_threshold(chrome_w);
         persist_body_size_only(app)?;
-        match dock_drag_outcome(&current, work, edge, threshold) {
-            DockDragOutcome::StayCurrent => {
-                SettingsRepository::set_dock_y(
-                    db,
-                    current.y + current.height / 2.0 - HANDLE_HEIGHT / 2.0,
-                )?;
-            }
-            DockDragOutcome::Switch(next) => {
-                SettingsRepository::set_dock_edge(db, next)?;
-                SettingsRepository::set_dock_y(
-                    db,
-                    current.y + current.height / 2.0 - HANDLE_HEIGHT / 2.0,
-                )?;
-            }
-            DockDragOutcome::Undock => undock_to_home(app, &current)?,
-        }
+        let current = current_window_bounds(&body)?;
+        SettingsRepository::set_dock_y(db, current.y + current.height / 2.0 - HANDLE_HEIGHT / 2.0)?;
+        follow_chrome_y_to_body(app).ok();
         return Ok(());
     }
 
@@ -734,9 +739,15 @@ fn capture_temp_body(app: &AppHandle) -> Result<(), AppError> {
     if !body.is_visible().unwrap_or(false) {
         return Ok(());
     }
-    let bounds = current_window_bounds(&body)?;
+    let outer = current_window_bounds(&body)?;
+    let (width, height) = inner_window_size(&body)?;
     let host = host_state(app)?;
-    lock_runtime(&host)?.temp_body_bounds = Some(bounds);
+    lock_runtime(&host)?.temp_body_bounds = Some(WindowBounds {
+        x: outer.x,
+        y: outer.y,
+        width,
+        height,
+    });
     Ok(())
 }
 
@@ -785,8 +796,17 @@ fn persist_body_bounds(app: &AppHandle) -> Result<(), AppError> {
     if !body.is_visible().unwrap_or(false) {
         return Ok(());
     }
-    let bounds = current_window_bounds(&body)?;
-    SettingsRepository::set_panel_bounds(&app_state(app)?.db, &bounds)
+    let outer = current_window_bounds(&body)?;
+    let (width, height) = inner_window_size(&body)?;
+    SettingsRepository::set_panel_bounds(
+        &app_state(app)?.db,
+        &WindowBounds {
+            x: outer.x,
+            y: outer.y,
+            width,
+            height,
+        },
+    )
 }
 
 fn persist_body_size_only(app: &AppHandle) -> Result<(), AppError> {
@@ -796,12 +816,107 @@ fn persist_body_size_only(app: &AppHandle) -> Result<(), AppError> {
     if !body.is_visible().unwrap_or(false) {
         return Ok(());
     }
-    let current = current_window_bounds(&body)?;
+    let (width, height) = inner_window_size(&body)?;
     let db = &app_state(app)?.db;
     let mut saved = SettingsRepository::get_panel_bounds(db)?;
-    saved.width = current.width;
-    saved.height = current.height;
+    saved.width = width;
+    saved.height = height;
     SettingsRepository::set_panel_bounds(db, &saved)
+}
+
+fn follow_chrome_y_to_body(app: &AppHandle) -> Result<(), AppError> {
+    if SettingsRepository::get_placement(&app_state(app)?.db)? != CompanionPlacement::Docked {
+        return Ok(());
+    }
+    let Some(body) = body_window(app) else {
+        return Ok(());
+    };
+    let Some(chrome) = chrome_window(app) else {
+        return Ok(());
+    };
+    if !body.is_visible().unwrap_or(false) || !chrome.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    let body_b = current_window_bounds(&body)?;
+    let work = work_area_logical(&chrome)?;
+    let edge = SettingsRepository::get_dock_edge(&app_state(app)?.db)?;
+    let y = body_b.y + body_b.height / 2.0 - HANDLE_HEIGHT / 2.0;
+    let actual = current_window_bounds(&chrome)?;
+    let snapped = snap_handle_to_work_area(work, edge, y, &actual);
+    apply_position(&chrome, snapped.x, snapped.y)
+}
+
+fn apply_always_on_top(app: &AppHandle, value: bool) {
+    let Ok(host) = host_state(app) else {
+        return;
+    };
+    let Ok(mut last) = host.last_aot.lock() else {
+        return;
+    };
+    if *last == Some(value) {
+        return;
+    }
+    *last = Some(value);
+    set_always_on_top(app, value);
+}
+
+fn cache_chrome_hit(app: &AppHandle, kind: ChromeKind, edge: DockEdge) {
+    if let Ok(host) = host_state(app) {
+        if let Ok(mut hit) = host.chrome_hit.lock() {
+            *hit = match kind {
+                ChromeKind::Hidden => None,
+                _ => Some((kind, edge)),
+            };
+        }
+    }
+}
+
+fn set_chrome_ignore(app: &AppHandle, chrome: &tauri::WebviewWindow, ignore: bool) {
+    let Ok(host) = host_state(app) else {
+        return;
+    };
+    if host.chrome_ignore.swap(ignore, Ordering::SeqCst) == ignore {
+        return;
+    }
+    let _ = chrome.set_ignore_cursor_events(ignore);
+}
+
+pub fn update_chrome_click_through(app: &AppHandle) -> Result<(), AppError> {
+    let Some(chrome) = chrome_window(app) else {
+        return Ok(());
+    };
+    if !chrome.is_visible().unwrap_or(false) {
+        set_chrome_ignore(app, &chrome, false);
+        return Ok(());
+    }
+    if os_primary_mouse_down() {
+        set_chrome_ignore(app, &chrome, false);
+        return Ok(());
+    }
+    let hit = {
+        let host = host_state(app)?;
+        host.chrome_hit.lock().ok().and_then(|guard| *guard)
+    };
+    let Some((kind, edge)) = hit else {
+        set_chrome_ignore(app, &chrome, false);
+        return Ok(());
+    };
+    let scale = chrome.scale_factor().unwrap_or(1.0);
+    let cursor = chrome
+        .cursor_position()
+        .map_err(|error| AppError::InternalError {
+            message: error.to_string(),
+        })?;
+    let cx = cursor.x / scale;
+    let cy = cursor.y / scale;
+    let bounds = current_window_bounds(&chrome)?;
+    let inside = match kind {
+        ChromeKind::Ball => ball_visual_hit(&bounds, cx, cy),
+        ChromeKind::Strip => strip_visual_hit(&bounds, edge, cx, cy),
+        ChromeKind::Hidden => false,
+    };
+    set_chrome_ignore(app, &chrome, !inside);
+    Ok(())
 }
 
 fn persist_chrome_ball(app: &AppHandle) -> Result<(), AppError> {
@@ -832,7 +947,7 @@ fn apply_surfaces(app: &AppHandle) -> Result<(), AppError> {
     let result = apply_surfaces_inner(app);
     let app_clone = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(80));
+        std::thread::sleep(std::time::Duration::from_millis(150));
         if let Ok(host) = host_state(&app_clone) {
             if host.apply_gen.load(Ordering::SeqCst) == gen {
                 host.applying.store(false, Ordering::SeqCst);
@@ -846,12 +961,16 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
     let state = app_state(app)?;
     let db = &state.db;
     let always_on_top = SettingsService::float_always_on_top(db).unwrap_or(true);
-    set_always_on_top(app, always_on_top);
+    apply_always_on_top(app, always_on_top);
 
-    let (visibility, panel_mode) = {
+    let (visibility, panel_mode, want_focus) = {
         let host = host_state(app)?;
         let rt = lock_runtime(&host)?;
-        (rt.visibility, rt.panel_mode)
+        (
+            rt.visibility,
+            rt.panel_mode,
+            host.focus_body_once.swap(false, Ordering::SeqCst),
+        )
     };
     let placement = SettingsRepository::get_placement(db)?;
     let home = SettingsRepository::get_home_shape(db)?;
@@ -868,6 +987,7 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
     if visibility == CompanionVisibility::Hidden {
         hide_window(&chrome)?;
         hide_window(&body)?;
+        cache_chrome_hit(app, ChromeKind::Hidden, DockEdge::Right);
         return Ok(());
     }
 
@@ -881,7 +1001,8 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
                     clamp_panel_in_work(work, &mut bounds);
                 }
                 apply_bounds(&body, &bounds, true)?;
-                if panel_mode == PanelMode::Pinned {
+                cache_chrome_hit(app, ChromeKind::Hidden, DockEdge::Right);
+                if want_focus && panel_mode == PanelMode::Pinned {
                     let _ = body.set_focus();
                 }
             }
@@ -905,7 +1026,9 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
                 let panel = SettingsRepository::get_panel_bounds(db)?;
                 let b_bounds = body_beside_handle(work, edge, &h_bounds, &panel);
                 apply_bounds(&body, &b_bounds, true)?;
-                if panel_mode == PanelMode::Pinned {
+                cache_chrome_hit(app, ChromeKind::Strip, edge);
+                set_chrome_ignore(app, &chrome, false);
+                if want_focus && panel_mode == PanelMode::Pinned {
                     let _ = body.set_focus();
                 }
             }
@@ -915,7 +1038,10 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
 
     hide_window(&body)?;
     match chrome_kind {
-        ChromeKind::Hidden => hide_window(&chrome)?,
+        ChromeKind::Hidden => {
+            hide_window(&chrome)?;
+            cache_chrome_hit(app, ChromeKind::Hidden, DockEdge::Right);
+        }
         ChromeKind::Ball => {
             let work = work_area_logical(&chrome).or_else(|_| work_area_logical(&body))?;
             let saved = SettingsRepository::get_ball_pos(db)?;
@@ -927,6 +1053,8 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
                     apply_position(&chrome, snapped.x, snapped.y)?;
                 }
             }
+            cache_chrome_hit(app, ChromeKind::Ball, DockEdge::Right);
+            set_chrome_ignore(app, &chrome, false);
         }
         ChromeKind::Strip => {
             let work = work_area_logical(&chrome).or_else(|_| work_area_logical(&body))?;
@@ -940,6 +1068,8 @@ fn apply_surfaces_inner(app: &AppHandle) -> Result<(), AppError> {
                     apply_position(&chrome, snapped.x, snapped.y)?;
                 }
             }
+            cache_chrome_hit(app, ChromeKind::Strip, edge);
+            set_chrome_ignore(app, &chrome, false);
         }
     }
     Ok(())

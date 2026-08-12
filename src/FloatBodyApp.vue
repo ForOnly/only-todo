@@ -33,12 +33,13 @@ const reminderError = ref<string | null>(null);
 const quickInput = ref<HTMLInputElement | null>(null);
 let fetchToken = 0;
 
-const HEADER_DRAG_THRESHOLD = 5;
+const HEADER_DRAG_THRESHOLD = 10;
 let headerPointerId: number | null = null;
 let headerStartX = 0;
 let headerStartY = 0;
 let headerDragging = false;
 let skipPreviewPin = false;
+let skipPreviewTimer: ReturnType<typeof setTimeout> | null = null;
 
 const { startDrag, onPointerUp } = useCompanionDrag("body");
 
@@ -51,11 +52,12 @@ const showMinus = computed(() => {
 });
 const minusTitle = computed(() => {
   const current = session.value;
-  if (current?.placement === "free" && current.homeShape === "ball") {
-    return "回到圆球";
-  }
+  if (!current) return "贴到边缘";
+  if (current.placement === "docked") return "收成条";
+  if (current.homeShape === "ball") return "回到圆球";
   return "贴到边缘";
 });
+const isPreview = computed(() => session.value?.panelMode === "preview");
 
 const {
   detail,
@@ -94,7 +96,7 @@ const panelVisible = computed(() => {
 const shouldFocusQuickAdd = computed(() => {
   const current = session.value;
   if (!current || current.visibility !== "shown") return false;
-  if (current.placement === "free") return current.panelMode === "pinned";
+  if (selectedId.value) return false;
   return current.panelMode === "pinned";
 });
 
@@ -128,6 +130,21 @@ function selectTodo(id: string) {
 
 async function openMainWithTodo(id: string) {
   await todoApi.showMainWindow(id);
+}
+
+async function completeTodo(id: string) {
+  try {
+    await todoApi.transitionTodo(id, "Done");
+    if (selectedId.value === id) selectedId.value = null;
+    try {
+      applySession(await companionRefreshSession());
+    } catch {
+      // ignore
+    }
+    await fetchTodos();
+  } catch (err) {
+    error.value = formatErrorMessage(err);
+  }
 }
 
 async function submitQuickAdd() {
@@ -213,6 +230,11 @@ function onHeaderPointerMove(event: PointerEvent) {
   if (dx > HEADER_DRAG_THRESHOLD || dy > HEADER_DRAG_THRESHOLD) {
     headerDragging = true;
     skipPreviewPin = true;
+    if (skipPreviewTimer) clearTimeout(skipPreviewTimer);
+    skipPreviewTimer = setTimeout(() => {
+      skipPreviewPin = false;
+      skipPreviewTimer = null;
+    }, 400);
     try {
       (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
     } catch {
@@ -355,6 +377,7 @@ onUnmounted(() => {
     @focusout="onFocusOut"
     @click="onPreviewClick"
   >
+    <p v-if="isPreview" class="preview-hint">预览 · 点击钉住</p>
     <header
       class="float-header"
       @pointerdown="onHeaderPointerDown"
@@ -397,6 +420,7 @@ onUnmounted(() => {
       :loading="loading"
       @select="selectTodo"
       @open-main="openMainWithTodo"
+      @complete="completeTodo"
     />
 
     <FloatDetailPanel
@@ -442,7 +466,16 @@ body,
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   overflow: hidden;
   color: #111827;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: system-ui, sans-serif;
+}
+
+.preview-hint {
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  text-align: center;
 }
 
 .edge-right {
