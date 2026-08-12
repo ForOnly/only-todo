@@ -12,6 +12,7 @@ const props = defineProps<{
   floatVisibleCount: number;
   floatAutoShow: boolean;
   floatDefaultMode: FloatDefaultMode;
+  floatHoverPreview: boolean;
   autostartEnabled: boolean;
 }>();
 
@@ -25,6 +26,7 @@ const localAlwaysOnTop = ref(props.floatAlwaysOnTop);
 const localVisibleCount = ref(props.floatVisibleCount);
 const localAutoShow = ref(props.floatAutoShow);
 const localDefaultMode = ref<FloatDefaultMode>(props.floatDefaultMode);
+const localHoverPreview = ref(props.floatHoverPreview);
 const localAutostart = ref(props.autostartEnabled);
 
 watch(
@@ -36,6 +38,7 @@ watch(
       localVisibleCount.value = props.floatVisibleCount;
       localAutoShow.value = props.floatAutoShow;
       localDefaultMode.value = props.floatDefaultMode;
+      localHoverPreview.value = props.floatHoverPreview;
       localAutostart.value = props.autostartEnabled;
     }
   },
@@ -48,6 +51,7 @@ function save() {
     floatVisibleCount: localVisibleCount.value,
     floatAutoShow: localAutoShow.value,
     floatDefaultMode: localDefaultMode.value,
+    floatHoverPreview: localHoverPreview.value,
     autostartEnabled: localAutostart.value,
   });
   emit("close");
@@ -72,14 +76,21 @@ function save() {
       </label>
       <label class="setting-row">
         <input v-model="localAutoShow" type="checkbox" />
-        <span>启动时显示悬浮窗</span>
+        <span>启动时显示伴侣</span>
       </label>
+      <div class="setting-block">
+        <label class="setting-row">
+          <span>默认形态</span>
+          <select v-model="localDefaultMode" class="select-input">
+            <option value="ball">小圆球</option>
+            <option value="panel">面板</option>
+          </select>
+        </label>
+        <p class="hint">小圆球为日常气泡，− 回到圆球；面板为迷你窗，− 贴到边缘。</p>
+      </div>
       <label class="setting-row">
-        <span>默认形态</span>
-        <select v-model="localDefaultMode" class="select-input">
-          <option value="ball">小圆球</option>
-          <option value="panel">面板</option>
-        </select>
+        <input v-model="localHoverPreview" type="checkbox" />
+        <span>贴边悬停预览</span>
       </label>
       <label class="setting-row">
         <span>显示条数</span>
@@ -120,6 +131,10 @@ function save() {
   color: #6b7280;
 }
 
+.setting-block {
+  padding: 4px 0;
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -127,6 +142,14 @@ function save() {
   font-size: 14px;
   cursor: pointer;
   padding: 4px 0;
+}
+
+.hint {
+  margin: 0 0 4px;
+  padding-left: 0;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
 }
 
 .number-input {

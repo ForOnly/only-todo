@@ -4,25 +4,30 @@ import { computed } from "vue";
 const props = defineProps<{
   activeCount: number;
   overdueCount: number;
-  dueTodayCount: number;
 }>();
 
 const emit = defineEmits<{
-  expand: [];
+  click: [];
   "drag-start": [];
 }>();
 
-const urgencyClass = computed(() => {
-  if (props.overdueCount > 0) return "urgency-overdue";
-  if (props.dueTodayCount > 0) return "urgency-today";
-  return "";
-});
-
 const DRAG_THRESHOLD = 5;
+
 let pointerId: number | null = null;
 let startX = 0;
 let startY = 0;
 let moved = false;
+
+const urgencyClass = computed(() => {
+  if (props.overdueCount > 0) return "urgency-overdue";
+  if (props.activeCount > 0) return "urgency-active";
+  return "";
+});
+
+const badge = computed(() => {
+  if (props.activeCount <= 0) return "";
+  return props.activeCount > 99 ? "99+" : String(props.activeCount);
+});
 
 function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return;
@@ -59,13 +64,14 @@ function onPointerUp(event: PointerEvent) {
     // ignore
   }
   if (wasClick) {
-    emit("expand");
+    emit("click");
   }
 }
 </script>
 
 <template>
-  <div
+  <button
+    type="button"
     class="float-ball-host"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
@@ -73,67 +79,50 @@ function onPointerUp(event: PointerEvent) {
     @pointercancel="onPointerUp"
   >
     <div class="float-ball" :class="urgencyClass">
-      <span class="logo">T</span>
-      <span v-if="activeCount > 0" class="badge">{{ activeCount > 99 ? "99+" : activeCount }}</span>
+      <span v-if="badge" class="badge">{{ badge }}</span>
     </div>
-  </div>
+  </button>
 </template>
 
 <style scoped>
-/* 64×64 窗口内居中 56 圆球，为 badge 留白避免 HWND 裁切 */
 .float-ball-host {
-  width: 64px;
-  height: 64px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  touch-action: none;
-  cursor: pointer;
   user-select: none;
+  touch-action: none;
 }
 
 .float-ball {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #3b82f6, #2563eb);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45);
+  background: #2563eb;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  font-family: Inter, system-ui, sans-serif;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.float-ball.urgency-today {
-  background: linear-gradient(145deg, #f59e0b, #d97706);
-  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.45);
+.float-ball.urgency-active {
+  background: #2563eb;
 }
 
 .float-ball.urgency-overdue {
-  background: linear-gradient(145deg, #ef4444, #dc2626);
+  background: #dc2626;
   box-shadow: 0 4px 16px rgba(220, 38, 38, 0.45);
 }
 
-.logo {
-  color: #fff;
-  font-weight: 700;
-  font-size: 22px;
-}
-
 .badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: #111827;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 18px;
-  text-align: center;
+  line-height: 1;
 }
 </style>

@@ -1,52 +1,38 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 import type { DockEdge } from "@/api/types";
 
-defineProps<{
+const props = defineProps<{
   edge: DockEdge;
+  activeCount: number;
+  overdueCount: number;
 }>();
 
 const emit = defineEmits<{
-  peek: [clientY: number];
-  unpeek: [];
+  click: [];
   "drag-start": [];
+  enter: [];
+  leave: [];
 }>();
 
 const DRAG_THRESHOLD = 5;
-const PEEK_DELAY_MS = 150;
 
 let pointerId: number | null = null;
 let startX = 0;
 let startY = 0;
 let moved = false;
-let peekTimer: ReturnType<typeof setTimeout> | null = null;
-let lastClientY = 0;
 
-function clearPeekTimer() {
-  if (peekTimer) {
-    clearTimeout(peekTimer);
-    peekTimer = null;
-  }
-}
+const urgencyClass = computed(() => {
+  if (props.overdueCount > 0) return "urgency-overdue";
+  if (props.activeCount > 0) return "urgency-active";
+  return "";
+});
 
-function onMouseEnter(event: MouseEvent) {
-  lastClientY = event.clientY;
-  clearPeekTimer();
-  peekTimer = setTimeout(() => {
-    peekTimer = null;
-    if (!moved) {
-      emit("peek", lastClientY);
-    }
-  }, PEEK_DELAY_MS);
-}
-
-function onMouseLeave() {
-  clearPeekTimer();
-  emit("unpeek");
-}
-
-function onMouseMove(event: MouseEvent) {
-  lastClientY = event.clientY;
-}
+const badge = computed(() => {
+  if (props.activeCount <= 0) return "";
+  return props.activeCount > 99 ? "99+" : String(props.activeCount);
+});
 
 function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return;
@@ -54,7 +40,6 @@ function onPointerDown(event: PointerEvent) {
   startX = event.clientX;
   startY = event.clientY;
   moved = false;
-  lastClientY = event.clientY;
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 }
 
@@ -64,7 +49,6 @@ function onPointerMove(event: PointerEvent) {
   const dy = Math.abs(event.clientY - startY);
   if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
     moved = true;
-    clearPeekTimer();
     try {
       (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
     } catch {
@@ -76,6 +60,7 @@ function onPointerMove(event: PointerEvent) {
 
 function onPointerUp(event: PointerEvent) {
   if (pointerId !== event.pointerId) return;
+  const wasClick = !moved;
   pointerId = null;
   moved = false;
   try {
@@ -83,30 +68,36 @@ function onPointerUp(event: PointerEvent) {
   } catch {
     // ignore
   }
+  if (wasClick) {
+    emit("click");
+  }
 }
 </script>
 
 <template>
-  <div
+  <button
+    type="button"
     class="dock-strip"
-    :class="`edge-${edge}`"
-    @mouseenter="onMouseEnter"
-    @mouseleave="onMouseLeave"
-    @mousemove="onMouseMove"
+    :class="[`edge-${edge}`, urgencyClass]"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
+    @mouseenter="emit('enter')"
+    @mouseleave="emit('leave')"
   >
-    <div class="dock-strip-bar" />
-  </div>
+    <span class="dock-strip-bar">
+      <span v-if="badge" class="count">{{ badge }}</span>
+    </span>
+  </button>
 </template>
 
 <style scoped>
-/* HWND 约 48px；蓝条 8px 贴屏幕外缘，内侧透明热区 */
 .dock-strip {
   width: 100%;
   height: 100%;
+  padding: 0;
+  border: none;
   background: transparent;
   display: flex;
   cursor: pointer;
@@ -122,30 +113,39 @@ function onPointerUp(event: PointerEvent) {
   justify-content: flex-end;
 }
 
-.edge-top {
-  flex-direction: column;
-  justify-content: flex-start;
-}
-
-.edge-bottom {
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
 .dock-strip-bar {
-  background: #2563eb;
-  flex-shrink: 0;
-}
-
-.edge-left .dock-strip-bar,
-.edge-right .dock-strip-bar {
-  width: 8px;
+  width: 16px;
   height: 100%;
+  flex: 0 0 16px;
+  background: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
 }
 
-.edge-top .dock-strip-bar,
-.edge-bottom .dock-strip-bar {
-  width: 100%;
-  height: 8px;
+.edge-left .dock-strip-bar {
+  border-radius: 0 4px 4px 0;
+}
+
+.edge-right .dock-strip-bar {
+  border-radius: 4px 0 0 4px;
+}
+
+.urgency-active .dock-strip-bar {
+  background: #2563eb;
+}
+
+.urgency-overdue .dock-strip-bar {
+  background: #dc2626;
+}
+
+.count {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 </style>

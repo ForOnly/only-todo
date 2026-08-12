@@ -7,18 +7,16 @@ pub mod todo;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum FloatDisplayMode {
+pub enum HomeShape {
     Ball,
     Panel,
-    Docked,
 }
 
-impl FloatDisplayMode {
+impl HomeShape {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ball => "ball",
             Self::Panel => "panel",
-            Self::Docked => "docked",
         }
     }
 
@@ -26,7 +24,7 @@ impl FloatDisplayMode {
         match value {
             "ball" => Some(Self::Ball),
             "panel" => Some(Self::Panel),
-            "docked" => Some(Self::Docked),
+            "docked" => Some(Self::Ball),
             _ => None,
         }
     }
@@ -37,8 +35,6 @@ impl FloatDisplayMode {
 pub enum DockEdge {
     Left,
     Right,
-    Top,
-    Bottom,
 }
 
 impl DockEdge {
@@ -46,8 +42,6 @@ impl DockEdge {
         match self {
             Self::Left => "left",
             Self::Right => "right",
-            Self::Top => "top",
-            Self::Bottom => "bottom",
         }
     }
 
@@ -55,11 +49,70 @@ impl DockEdge {
         match value {
             "left" => Some(Self::Left),
             "right" => Some(Self::Right),
-            "top" => Some(Self::Top),
-            "bottom" => Some(Self::Bottom),
+            "top" | "bottom" => Some(Self::Right),
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompanionVisibility {
+    Shown,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompanionPlacement {
+    Free,
+    Docked,
+}
+
+impl CompanionPlacement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Free => "free",
+            Self::Docked => "docked",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "free" | "ball" | "panel" => Some(Self::Free),
+            "docked" => Some(Self::Docked),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelMode {
+    Closed,
+    Preview,
+    Pinned,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChromeKind {
+    Ball,
+    Strip,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BodyView {
+    TodoMini,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompanionSurface {
+    Chrome,
+    Body,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +123,8 @@ pub struct SettingsDto {
     pub float_always_on_top: bool,
     pub float_visible_count: u32,
     pub float_auto_show: bool,
-    pub float_default_mode: FloatDisplayMode,
+    pub float_default_mode: HomeShape,
+    pub float_hover_preview: bool,
     pub autostart_enabled: bool,
 }
 
@@ -88,7 +142,9 @@ pub struct UpdateSettingsDto {
     #[serde(default)]
     pub float_auto_show: Option<bool>,
     #[serde(default)]
-    pub float_default_mode: Option<FloatDisplayMode>,
+    pub float_default_mode: Option<HomeShape>,
+    #[serde(default)]
+    pub float_hover_preview: Option<bool>,
     #[serde(default)]
     pub autostart_enabled: Option<bool>,
 }
@@ -104,11 +160,54 @@ pub struct WindowBounds {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FloatWindowState {
-    pub display_mode: FloatDisplayMode,
-    pub default_mode: FloatDisplayMode,
+pub struct CompanionDragEndResult {
+    pub still_dragging: bool,
+    pub session: CompanionSession,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompanionSession {
+    pub visibility: CompanionVisibility,
+    pub placement: CompanionPlacement,
+    pub home_shape: HomeShape,
+    pub panel_mode: PanelMode,
+    pub chrome: ChromeKind,
     pub dock_edge: DockEdge,
+    pub dock_y: f64,
+    pub body_view: BodyView,
+    pub hover_preview: bool,
     pub active_count: u64,
     pub overdue_count: u64,
     pub due_today_count: u64,
+}
+
+pub fn derive_chrome(
+    visibility: CompanionVisibility,
+    placement: CompanionPlacement,
+    home_shape: HomeShape,
+    panel_mode: PanelMode,
+) -> ChromeKind {
+    if visibility != CompanionVisibility::Shown {
+        return ChromeKind::Hidden;
+    }
+    match placement {
+        CompanionPlacement::Docked => ChromeKind::Strip,
+        CompanionPlacement::Free => {
+            if panel_visible(placement, panel_mode) {
+                ChromeKind::Hidden
+            } else if home_shape == HomeShape::Ball {
+                ChromeKind::Ball
+            } else {
+                ChromeKind::Hidden
+            }
+        }
+    }
+}
+
+pub fn panel_visible(placement: CompanionPlacement, panel_mode: PanelMode) -> bool {
+    match placement {
+        CompanionPlacement::Free => panel_mode == PanelMode::Pinned,
+        CompanionPlacement::Docked => panel_mode != PanelMode::Closed,
+    }
 }

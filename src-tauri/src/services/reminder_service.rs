@@ -1,8 +1,6 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 
-use crate::domain::reminder::{
-    CreateReminderDto, ReminderDto, RepeatType, UpdateReminderDto,
-};
+use crate::domain::reminder::{CreateReminderDto, ReminderDto, RepeatType, UpdateReminderDto};
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 use crate::repository::event_repository::EventRepository;

@@ -1,6 +1,8 @@
 use rusqlite::{params, OptionalExtension};
 
-use crate::domain::{DockEdge, FloatDisplayMode, SettingsDto, UpdateSettingsDto, WindowBounds};
+use crate::domain::{
+    CompanionPlacement, DockEdge, HomeShape, SettingsDto, UpdateSettingsDto, WindowBounds,
+};
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
@@ -11,11 +13,11 @@ impl SettingsRepository {
         let notification_enabled = Self::get_bool(db, "notification.enabled")?.unwrap_or(true);
         let list_default_sort = Self::get_value(db, "list.default_sort")?
             .unwrap_or_else(|| r#"{"sort_by":"priority","sort_order":"desc"}"#.into());
-        let float_always_on_top = Self::get_bool(db, "floating_window.always_on_top")?.unwrap_or(true);
-        let float_visible_count = Self::get_u32(db, "floating_window.visible_count")?.unwrap_or(5);
-        let float_auto_show = Self::get_bool(db, "floating_window.auto_show")?.unwrap_or(true);
-        let float_default_mode = Self::get_display_mode_key(db, "floating_window.default_mode")?
-            .unwrap_or(FloatDisplayMode::Ball);
+        let float_always_on_top = Self::get_bool(db, "companion.always_on_top")?.unwrap_or(true);
+        let float_visible_count = Self::get_u32(db, "companion.visible_count")?.unwrap_or(5);
+        let float_auto_show = Self::get_bool(db, "companion.auto_show")?.unwrap_or(true);
+        let float_default_mode = Self::get_home_shape(db)?;
+        let float_hover_preview = Self::get_bool(db, "companion.hover_preview")?.unwrap_or(false);
         let autostart_enabled = Self::get_bool(db, "autostart.enabled")?.unwrap_or(false);
 
         Ok(SettingsDto {
@@ -25,13 +27,18 @@ impl SettingsRepository {
             float_visible_count,
             float_auto_show,
             float_default_mode,
+            float_hover_preview,
             autostart_enabled,
         })
     }
 
     pub fn update(db: &Database, dto: &UpdateSettingsDto) -> Result<SettingsDto, AppError> {
         if let Some(enabled) = dto.notification_enabled {
-            Self::set_value(db, "notification.enabled", if enabled { "true" } else { "false" })?;
+            Self::set_value(
+                db,
+                "notification.enabled",
+                if enabled { "true" } else { "false" },
+            )?;
         }
         if let Some(sort) = &dto.list_default_sort {
             Self::set_value(db, "list.default_sort", sort)?;
@@ -39,86 +46,117 @@ impl SettingsRepository {
         if let Some(value) = dto.float_always_on_top {
             Self::set_value(
                 db,
-                "floating_window.always_on_top",
+                "companion.always_on_top",
                 if value { "true" } else { "false" },
             )?;
         }
         if let Some(count) = dto.float_visible_count {
             let clamped = count.clamp(1, 20);
-            Self::set_value(db, "floating_window.visible_count", &clamped.to_string())?;
+            Self::set_value(db, "companion.visible_count", &clamped.to_string())?;
         }
         if let Some(value) = dto.float_auto_show {
-            Self::set_value(db, "floating_window.auto_show", if value { "true" } else { "false" })?;
+            Self::set_value(
+                db,
+                "companion.auto_show",
+                if value { "true" } else { "false" },
+            )?;
         }
         if let Some(mode) = dto.float_default_mode {
-            Self::set_value(db, "floating_window.default_mode", mode.as_str())?;
+            Self::set_home_shape(db, mode)?;
+        }
+        if let Some(value) = dto.float_hover_preview {
+            Self::set_value(
+                db,
+                "companion.hover_preview",
+                if value { "true" } else { "false" },
+            )?;
         }
         if let Some(value) = dto.autostart_enabled {
-            Self::set_value(db, "autostart.enabled", if value { "true" } else { "false" })?;
+            Self::set_value(
+                db,
+                "autostart.enabled",
+                if value { "true" } else { "false" },
+            )?;
         }
         Self::get(db)
     }
 
-    pub fn get_display_mode(db: &Database) -> Result<FloatDisplayMode, AppError> {
-        Ok(Self::get_display_mode_key(db, "floating_window.display_mode")?
-            .unwrap_or(FloatDisplayMode::Ball))
+    pub fn get_home_shape(db: &Database) -> Result<HomeShape, AppError> {
+        Ok(Self::get_value(db, "companion.home_shape")?
+            .and_then(|v| HomeShape::from_str(&v))
+            .unwrap_or(HomeShape::Ball))
     }
 
-    /// 用户设置的主形态（ball / panel）；docked 视为 ball
-    pub fn get_home_mode(db: &Database) -> Result<FloatDisplayMode, AppError> {
-        Ok(
-            match Self::get_display_mode_key(db, "floating_window.default_mode")?
-                .unwrap_or(FloatDisplayMode::Ball)
-            {
-                FloatDisplayMode::Docked => FloatDisplayMode::Ball,
-                other => other,
-            },
-        )
+    pub fn set_home_shape(db: &Database, shape: HomeShape) -> Result<(), AppError> {
+        Self::set_value(db, "companion.home_shape", shape.as_str())
     }
 
-    pub fn set_display_mode(db: &Database, mode: FloatDisplayMode) -> Result<(), AppError> {
-        Self::set_value(db, "floating_window.display_mode", mode.as_str())
+    pub fn get_placement(db: &Database) -> Result<CompanionPlacement, AppError> {
+        Ok(Self::get_value(db, "companion.placement")?
+            .and_then(|v| CompanionPlacement::from_str(&v))
+            .unwrap_or(CompanionPlacement::Free))
+    }
+
+    pub fn set_placement(db: &Database, placement: CompanionPlacement) -> Result<(), AppError> {
+        Self::set_value(db, "companion.placement", placement.as_str())
     }
 
     pub fn get_dock_edge(db: &Database) -> Result<DockEdge, AppError> {
-        let value = Self::get_value(db, "floating_window.dock_edge")?.unwrap_or_else(|| "right".into());
-        DockEdge::from_str(&value).ok_or_else(|| AppError::InternalError {
-            message: format!("invalid dock edge: {value}"),
-        })
+        let value = Self::get_value(db, "companion.dock_edge")?.unwrap_or_else(|| "right".into());
+        Ok(DockEdge::from_str(&value).unwrap_or(DockEdge::Right))
     }
 
     pub fn set_dock_edge(db: &Database, edge: DockEdge) -> Result<(), AppError> {
-        Self::set_value(db, "floating_window.dock_edge", edge.as_str())
+        Self::set_value(db, "companion.dock_edge", edge.as_str())?;
+        Self::set_has_docked(db, true)
+    }
+
+    pub fn get_has_docked(db: &Database) -> Result<bool, AppError> {
+        Ok(Self::get_bool(db, "companion.has_docked")?.unwrap_or(false))
+    }
+
+    pub fn set_has_docked(db: &Database, value: bool) -> Result<(), AppError> {
+        Self::set_value(
+            db,
+            "companion.has_docked",
+            if value { "true" } else { "false" },
+        )
+    }
+
+    pub fn get_dock_y(db: &Database) -> Result<f64, AppError> {
+        Ok(Self::get_value(db, "companion.dock_y")?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(100.0))
+    }
+
+    pub fn set_dock_y(db: &Database, y: f64) -> Result<(), AppError> {
+        Self::set_value(db, "companion.dock_y", &format!("{y}"))
     }
 
     pub fn get_panel_bounds(db: &Database) -> Result<WindowBounds, AppError> {
-        Self::get_bounds_key(db, "floating_window.panel_bounds", 320.0, 480.0)
+        Self::get_bounds_key(db, "companion.panel_bounds", 320.0, 480.0)
     }
 
     pub fn set_panel_bounds(db: &Database, bounds: &WindowBounds) -> Result<(), AppError> {
-        Self::set_bounds_key(db, "floating_window.panel_bounds", bounds)
+        Self::set_bounds_key(db, "companion.panel_bounds", bounds)
     }
 
-    pub fn get_ball_bounds(db: &Database) -> Result<WindowBounds, AppError> {
-        Self::get_bounds_key(db, "floating_window.ball_bounds", 64.0, 64.0)
+    pub fn get_ball_pos(db: &Database) -> Result<WindowBounds, AppError> {
+        let mut bounds = Self::get_bounds_key(db, "companion.ball_pos", 64.0, 64.0)?;
+        bounds.width = 64.0;
+        bounds.height = 64.0;
+        Ok(bounds)
     }
 
-    pub fn set_ball_bounds(db: &Database, bounds: &WindowBounds) -> Result<(), AppError> {
-        Self::set_bounds_key(db, "floating_window.ball_bounds", bounds)
+    pub fn set_ball_pos(db: &Database, bounds: &WindowBounds) -> Result<(), AppError> {
+        let mut stored = bounds.clone();
+        stored.width = 64.0;
+        stored.height = 64.0;
+        Self::set_bounds_key(db, "companion.ball_pos", &stored)
     }
 
-    /// 兼容旧版 floating_window.bounds，读写 panel bounds
-    pub fn get_float_bounds(db: &Database) -> Result<WindowBounds, AppError> {
-        if let Some(json) = Self::get_value(db, "floating_window.panel_bounds")? {
-            return serde_json::from_str(&json).map_err(|error| AppError::InternalError {
-                message: format!("invalid panel_bounds: {error}"),
-            });
-        }
-        Self::get_bounds_key(db, "floating_window.bounds", 320.0, 480.0)
-    }
-
-    pub fn set_float_bounds(db: &Database, bounds: &WindowBounds) -> Result<(), AppError> {
-        Self::set_panel_bounds(db, bounds)
+    pub fn get_hover_preview(db: &Database) -> Result<bool, AppError> {
+        Ok(Self::get_bool(db, "companion.hover_preview")?.unwrap_or(false))
     }
 
     pub fn get_value(db: &Database, key: &str) -> Result<Option<String>, AppError> {
@@ -147,14 +185,6 @@ impl SettingsRepository {
             })?;
             Ok(())
         })
-    }
-
-    fn get_display_mode_key(
-        db: &Database,
-        key: &str,
-    ) -> Result<Option<FloatDisplayMode>, AppError> {
-        Ok(Self::get_value(db, key)?
-            .and_then(|v| FloatDisplayMode::from_str(&v)))
     }
 
     fn get_bounds_key(

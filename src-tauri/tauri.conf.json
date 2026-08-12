@@ -18,8 +18,21 @@
         "height": 768
       },
       {
-        "label": "float",
-        "title": "Only Todo Float",
+        "label": "float-chrome",
+        "title": "Only Todo Chrome",
+        "width": 64,
+        "height": 64,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true
+      },
+      {
+        "label": "float-body",
+        "title": "Only Todo Body",
         "width": 320,
         "height": 480,
         "decorations": false,

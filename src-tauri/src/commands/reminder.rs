@@ -1,8 +1,6 @@
 use tauri::State;
 
-use crate::domain::reminder::{
-    CreateReminderDto, ReminderDto, UpdateReminderDto,
-};
+use crate::domain::reminder::{CreateReminderDto, ReminderDto, UpdateReminderDto};
 use crate::errors::AppError;
 use crate::services::reminder_service::ReminderService;
 use crate::state::AppState;

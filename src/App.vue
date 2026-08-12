@@ -76,6 +76,7 @@ const floatAlwaysOnTop = ref(true);
 const floatVisibleCount = ref(5);
 const floatAutoShow = ref(true);
 const floatDefaultMode = ref<FloatDefaultMode>("ball");
+const floatHoverPreview = ref(false);
 const autostartEnabled = ref(false);
 const allTags = ref<string[]>([]);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
@@ -101,6 +102,7 @@ onMounted(async () => {
     floatVisibleCount.value = settings.floatVisibleCount;
     floatAutoShow.value = settings.floatAutoShow;
     floatDefaultMode.value = settings.floatDefaultMode;
+    floatHoverPreview.value = settings.floatHoverPreview;
     autostartEnabled.value = settings.autostartEnabled;
   } catch {
     // 首次启动时 settings 表可能尚未写入种子数据，忽略即可
@@ -212,6 +214,7 @@ async function handleSettingsUpdate(payload: {
   floatVisibleCount?: number;
   floatAutoShow?: boolean;
   floatDefaultMode?: FloatDefaultMode;
+  floatHoverPreview?: boolean;
   autostartEnabled?: boolean;
 }) {
   const settings = await updateSettings(payload);
@@ -220,6 +223,7 @@ async function handleSettingsUpdate(payload: {
   floatVisibleCount.value = settings.floatVisibleCount;
   floatAutoShow.value = settings.floatAutoShow;
   floatDefaultMode.value = settings.floatDefaultMode;
+  floatHoverPreview.value = settings.floatHoverPreview;
   autostartEnabled.value = settings.autostartEnabled;
 }
 </script>
@@ -304,6 +308,7 @@ async function handleSettingsUpdate(payload: {
       :float-visible-count="floatVisibleCount"
       :float-auto-show="floatAutoShow"
       :float-default-mode="floatDefaultMode"
+      :float-hover-preview="floatHoverPreview"
       :autostart-enabled="autostartEnabled"
       @close="settingsOpen = false"
       @update="handleSettingsUpdate"

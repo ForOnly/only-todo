@@ -4,9 +4,15 @@ export type RepeatType = "none" | "daily" | "weekly";
 export type SortBy = "priority" | "createdAt" | "updatedAt" | "completedAt" | "dueDate" | "title";
 export type SortOrder = "asc" | "desc";
 export type DueDateFilter = "all" | "today" | "overdue";
-export type FloatDisplayMode = "ball" | "panel" | "docked";
-export type DockEdge = "left" | "right" | "top" | "bottom";
-export type FloatDefaultMode = "ball" | "panel";
+export type DockEdge = "left" | "right";
+export type HomeShape = "ball" | "panel";
+export type FloatDefaultMode = HomeShape;
+export type CompanionVisibility = "shown" | "hidden";
+export type CompanionPlacement = "free" | "docked";
+export type PanelMode = "closed" | "preview" | "pinned";
+export type ChromeKind = "ball" | "strip" | "hidden";
+export type BodyView = "todoMini";
+export type CompanionSurface = "chrome" | "body";
 
 /** settings 表中 list.default_sort 的 JSON 结构 */
 export interface ListDefaultSort {
@@ -105,6 +111,7 @@ export interface SettingsDto {
   floatVisibleCount: number;
   floatAutoShow: boolean;
   floatDefaultMode: FloatDefaultMode;
+  floatHoverPreview: boolean;
   autostartEnabled: boolean;
 }
 
@@ -115,16 +122,28 @@ export interface UpdateSettingsDto {
   floatVisibleCount?: number;
   floatAutoShow?: boolean;
   floatDefaultMode?: FloatDefaultMode;
+  floatHoverPreview?: boolean;
   autostartEnabled?: boolean;
 }
 
-export interface FloatWindowState {
-  displayMode: FloatDisplayMode;
-  defaultMode: FloatDefaultMode;
+export interface CompanionSession {
+  visibility: CompanionVisibility;
+  placement: CompanionPlacement;
+  homeShape: HomeShape;
+  panelMode: PanelMode;
+  chrome: ChromeKind;
   dockEdge: DockEdge;
+  dockY: number;
+  bodyView: BodyView;
+  hoverPreview: boolean;
   activeCount: number;
   overdueCount: number;
   dueTodayCount: number;
+}
+
+export interface CompanionDragEndResult {
+  stillDragging: boolean;
+  session: CompanionSession;
 }
 
 /** Tauri Command 返回的结构化错误 */

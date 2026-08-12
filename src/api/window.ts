@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { DockEdge, FloatDisplayMode, FloatWindowState } from "@/api/types";
+import type {
+  BodyView,
+  CompanionDragEndResult,
+  CompanionSession,
+  CompanionSurface,
+} from "@/api/types";
 
 /** Tauri Command: show_floating_window */
 export async function showFloatingWindow(): Promise<void> {
@@ -22,42 +27,44 @@ export async function getActiveTodoCount(): Promise<number> {
   return invoke("get_active_todo_count");
 }
 
-/** Tauri Command: get_float_window_state */
-export async function getFloatWindowState(): Promise<FloatWindowState> {
-  return invoke("get_float_window_state");
+/** Tauri Command: get_companion_session（只读快照，不广播） */
+export async function getCompanionSession(): Promise<CompanionSession> {
+  return invoke("get_companion_session");
 }
 
-/** Tauri Command: set_float_display_mode */
-export async function setFloatDisplayMode(mode: FloatDisplayMode): Promise<FloatWindowState> {
-  return invoke("set_float_display_mode", { mode });
+/** Tauri Command: companion_refresh_session */
+export async function companionRefreshSession(): Promise<CompanionSession> {
+  return invoke("companion_refresh_session");
 }
 
-/** Tauri Command: dock_float_window */
-export async function dockFloatWindow(edge?: DockEdge): Promise<FloatWindowState> {
-  return invoke("dock_float_window", { edge: edge ?? null });
+/** Tauri Command: companion_click_chrome */
+export async function companionClickChrome(): Promise<CompanionSession> {
+  return invoke("companion_click_chrome");
 }
 
-/** Tauri Command: undock_float_window */
-export async function undockFloatWindow(): Promise<FloatWindowState> {
-  return invoke("undock_float_window");
+/** Tauri Command: companion_minimize */
+export async function companionMinimize(): Promise<CompanionSession> {
+  return invoke("companion_minimize");
 }
 
-/** Tauri Command: try_dock_on_edge — 拖拽结束后检测边缘吸附 */
-export async function tryDockOnEdge(): Promise<FloatWindowState> {
-  return invoke("try_dock_on_edge");
+/** Tauri Command: companion_drag_ended */
+export async function companionDragEnded(which: CompanionSurface): Promise<CompanionDragEndResult> {
+  return invoke("companion_drag_ended", { which });
 }
 
-/** Tauri Command: peek_docked_float — clientY 为相对窗口客户区的 Y */
-export async function peekDockedFloat(clientY?: number): Promise<FloatWindowState> {
-  return invoke("peek_docked_float", { clientY: clientY ?? null });
+/** Tauri Command: companion_pointer_cluster */
+export async function companionPointerCluster(
+  surface: CompanionSurface,
+  opts?: { inside?: boolean; focused?: boolean },
+): Promise<CompanionSession> {
+  return invoke("companion_pointer_cluster", {
+    surface,
+    inside: opts?.inside ?? null,
+    focused: opts?.focused ?? null,
+  });
 }
 
-/** Tauri Command: unpeek_docked_float — 挂边移开收回竖线 */
-export async function unpeekDockedFloat(): Promise<FloatWindowState> {
-  return invoke("unpeek_docked_float");
-}
-
-/** OS 级主按键是否仍按下（native drag 后 WebView 常收不到 pointerup） */
-export async function isPrimaryMouseDown(): Promise<boolean> {
-  return invoke("is_primary_mouse_down");
+/** Tauri Command: companion_open_view */
+export async function companionOpenView(view: BodyView): Promise<CompanionSession> {
+  return invoke("companion_open_view", { view });
 }

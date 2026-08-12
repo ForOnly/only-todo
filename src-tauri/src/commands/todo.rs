@@ -2,9 +2,7 @@ use tauri::State;
 
 use crate::domain::{
     status::TodoStatus,
-    todo::{
-        CreateTodoDto, ListTodoQuery, PaginatedResponse, TodoDto, UpdateTodoDto,
-    },
+    todo::{CreateTodoDto, ListTodoQuery, PaginatedResponse, TodoDto, UpdateTodoDto},
 };
 use crate::errors::AppError;
 use crate::services::todo_service::TodoService;

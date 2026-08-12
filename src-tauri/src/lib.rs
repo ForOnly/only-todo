@@ -4,13 +4,13 @@ mod commands;
 mod domain;
 mod errors;
 mod events;
+mod float;
 mod infrastructure;
 mod repository;
 mod scheduler;
 mod services;
 mod state;
 
-use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Mutex;
 
 use commands::{
@@ -24,12 +24,13 @@ use commands::{
         transition_todo, update_todo,
     },
     window::{
-        dock_float_window, get_active_todo_count, get_float_window_state, hide_floating_window,
-        hide_to_tray, is_primary_mouse_down, peek_docked_float, set_float_display_mode,
-        show_floating_window, show_main_window, toggle_floating_window, try_dock_on_edge,
-        undock_float_window, unpeek_docked_float, FloatGeometryLock,
+        companion_click_chrome, companion_drag_ended, companion_minimize, companion_open_view,
+        companion_pointer_cluster, companion_refresh_session, get_active_todo_count,
+        get_companion_session, hide_floating_window, hide_to_tray, show_floating_window,
+        show_main_window, toggle_floating_window,
     },
 };
+use float::host::FloatHost;
 use infrastructure::database::Database;
 use infrastructure::filesystem;
 use infrastructure::notification::ensure_toast_registration;
@@ -57,16 +58,13 @@ pub fn run() {
             let db = Database::new(app.handle())?;
             app.manage(AppState { db });
             app.manage(PendingNavigation(Mutex::new(None)));
-            app.manage(FloatGeometryLock {
-                locked: AtomicBool::new(false),
-                generation: AtomicU64::new(0),
-            });
+            app.manage(FloatHost::new());
 
             setup_tray(app.handle())?;
             setup_main_window(app.handle())?;
-            setup_float_window(app.handle())?;
+            setup_companion_windows(app.handle())?;
             apply_startup_windows(app.handle())?;
-            commands::window::update_tray_tooltip(app.handle());
+            float::update_tray_tooltip(app.handle());
             scheduler::start(app.handle().clone());
 
             Ok(())
@@ -94,14 +92,13 @@ pub fn run() {
             hide_floating_window,
             toggle_floating_window,
             get_active_todo_count,
-            get_float_window_state,
-            set_float_display_mode,
-            dock_float_window,
-            undock_float_window,
-            try_dock_on_edge,
-            peek_docked_float,
-            unpeek_docked_float,
-            is_primary_mouse_down,
+            get_companion_session,
+            companion_refresh_session,
+            companion_click_chrome,
+            companion_minimize,
+            companion_drag_ended,
+            companion_pointer_cluster,
+            companion_open_view,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -139,7 +136,7 @@ fn apply_startup_windows(app: &tauri::AppHandle) -> Result<(), Box<dyn std::erro
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.hide();
         }
-        let _ = commands::window::show_floating_window_impl(app.clone());
+        let _ = commands::window::show_floating_window_impl(app);
     }
 
     Ok(())
@@ -170,39 +167,44 @@ fn setup_main_window(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-fn setup_float_window(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(window) = app.get_webview_window(commands::window::FLOAT_LABEL) {
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            match event {
+fn setup_companion_windows(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    for label in [float::CHROME_LABEL, float::BODY_LABEL] {
+        if let Some(window) = app.get_webview_window(label) {
+            let app_handle = app.clone();
+            let is_body = label == float::BODY_LABEL;
+            window.on_window_event(move |event| match event {
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
-                    let _ = commands::window::hide_floating_window_impl(app_handle.clone());
+                    let _ = commands::window::hide_floating_window_impl(&app_handle);
                 }
                 WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                    if commands::window::is_geometry_locked(&app_handle) {
+                    let applying = app_handle
+                        .try_state::<FloatHost>()
+                        .map(|host| host.is_applying())
+                        .unwrap_or(false);
+                    if applying {
                         return;
                     }
-                    let _ = commands::window::persist_float_bounds(&app_handle);
+                    if is_body {
+                        let _ = FloatHost::persist_body_if_needed(&app_handle);
+                    } else {
+                        let _ = FloatHost::persist_chrome_if_ball(&app_handle);
+                    }
                 }
                 _ => {}
-            }
-        });
+            });
+        }
     }
     Ok(())
 }
 
 fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show_float =
-        MenuItem::with_id(app, "show_float", "显示悬浮窗", true, None::<&str>)?;
+    let show_float = MenuItem::with_id(app, "show_float", "显示伴侣", true, None::<&str>)?;
     let show_main = MenuItem::with_id(app, "show_main", "打开主窗口", true, None::<&str>)?;
     let new_todo = MenuItem::with_id(app, "new_todo", "新建任务", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[&show_float, &show_main, &new_todo, &settings, &quit],
-    )?;
+    let menu = Menu::with_items(app, &[&show_float, &show_main, &new_todo, &settings, &quit])?;
 
     let icon = app
         .default_window_icon()
@@ -216,7 +218,7 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "show_float" => {
-                let _ = commands::window::show_floating_window_impl(app.clone());
+                let _ = commands::window::show_floating_window_impl(app);
             }
             "show_main" => {
                 let _ = commands::window::show_main_window_impl(app.clone(), None);
@@ -242,7 +244,7 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
             } = event
             {
                 let app = tray.app_handle();
-                let _ = commands::window::toggle_floating_window_impl(app.clone());
+                let _ = commands::window::toggle_floating_window_impl(app);
             }
         })
         .build(app)?;

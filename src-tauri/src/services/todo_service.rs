@@ -4,9 +4,7 @@ use serde_json;
 use crate::domain::{
     priority::Priority,
     status::TodoStatus,
-    todo::{
-        CreateTodoDto, ListTodoQuery, PaginatedResponse, TodoDto, UpdateTodoDto,
-    },
+    todo::{CreateTodoDto, ListTodoQuery, PaginatedResponse, TodoDto, UpdateTodoDto},
 };
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
@@ -147,7 +145,8 @@ impl TodoService {
 
         let from = todo.status;
         let updated = TodoRepository::transition(db, id, target)?;
-        let payload = serde_json::json!({ "from": from.as_str(), "to": target.as_str() }).to_string();
+        let payload =
+            serde_json::json!({ "from": from.as_str(), "to": target.as_str() }).to_string();
         let _ = EventRepository::write(db, "todo", id, "todo.transitioned", &payload);
         Ok(updated.into())
     }

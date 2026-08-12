@@ -14,7 +14,11 @@ use crate::infrastructure::database::Database;
 pub struct TodoRepository;
 
 impl TodoRepository {
-    pub fn create(db: &Database, dto: &CreateTodoDto, priority: Priority) -> Result<Todo, AppError> {
+    pub fn create(
+        db: &Database,
+        dto: &CreateTodoDto,
+        priority: Priority,
+    ) -> Result<Todo, AppError> {
         let now = Utc::now();
         let due_date = dto
             .due_date
@@ -89,9 +93,10 @@ impl TodoRepository {
         }
         todo.updated_at = Utc::now();
 
-        let tags_json = serde_json::to_string(&todo.tags).map_err(|error| AppError::InternalError {
-            message: error.to_string(),
-        })?;
+        let tags_json =
+            serde_json::to_string(&todo.tags).map_err(|error| AppError::InternalError {
+                message: error.to_string(),
+            })?;
 
         db.with_conn(|conn| {
             conn.execute(
@@ -288,8 +293,7 @@ impl TodoRepository {
 
         if let Some(statuses) = &query.status {
             if !statuses.is_empty() {
-                let placeholders: Vec<String> =
-                    statuses.iter().map(|_| "?".to_string()).collect();
+                let placeholders: Vec<String> = statuses.iter().map(|_| "?".to_string()).collect();
                 conditions.push(format!("status IN ({})", placeholders.join(", ")));
                 for status in statuses {
                     bind_values.push(status.as_str().to_string());
@@ -361,11 +365,9 @@ impl TodoRepository {
                     message: error.to_string(),
                 })?;
 
-            let mut list_stmt = conn
-                .prepare(&list_sql)
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
+            let mut list_stmt = conn.prepare(&list_sql).map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
 
             let mut list_bind: Vec<String> = bind_values;
             list_bind.push(query.page_size.to_string());

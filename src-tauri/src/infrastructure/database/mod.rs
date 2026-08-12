@@ -41,6 +41,14 @@ const MIGRATIONS: &[Migration] = &[
         version: 6,
         sql: include_str!("../../../migrations/006_float_modes.sql"),
     },
+    Migration {
+        version: 7,
+        sql: include_str!("../../../migrations/007_companion.sql"),
+    },
+    Migration {
+        version: 8,
+        sql: include_str!("../../../migrations/008_companion_fill.sql"),
+    },
 ];
 
 impl Database {

@@ -9,8 +9,10 @@ export const TAURI_EVENTS = {
   NAVIGATE_TO_TODO: "navigate-to-todo",
   /** 托盘菜单「设置」— 打开 SettingsModal */
   OPEN_SETTINGS: "open-settings",
-  /** 设置已更新 — 悬浮窗刷新可见条数等 */
+  /** 设置已更新 — 伴侣刷新可见条数等 */
   SETTINGS_UPDATED: "settings-updated",
+  /** 伴侣会话变更 */
+  FLOAT_SESSION_CHANGED: "float-session-changed",
 } as const;
 
 export type TauriEventName = (typeof TAURI_EVENTS)[keyof typeof TAURI_EVENTS];
