@@ -1,7 +1,8 @@
 use rusqlite::{params, OptionalExtension};
 
 use crate::domain::{
-    CompanionPlacement, DockEdge, HomeShape, SettingsDto, UpdateSettingsDto, WindowBounds,
+    CompanionPlacement, DockEdge, HomeShape, SettingsDto, UiLocale, UiTheme, UpdateSettingsDto,
+    WindowBounds,
 };
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
@@ -19,6 +20,12 @@ impl SettingsRepository {
         let float_default_mode = Self::get_home_shape(db)?;
         let float_hover_preview = Self::get_bool(db, "companion.hover_preview")?.unwrap_or(false);
         let autostart_enabled = Self::get_bool(db, "autostart.enabled")?.unwrap_or(false);
+        let ui_theme = Self::get_value(db, "ui.theme")?
+            .map(|v| UiTheme::from_str(&v))
+            .unwrap_or(UiTheme::System);
+        let ui_locale = Self::get_value(db, "ui.locale")?
+            .map(|v| UiLocale::from_str(&v))
+            .unwrap_or(UiLocale::ZhCN);
 
         Ok(SettingsDto {
             notification_enabled,
@@ -29,6 +36,8 @@ impl SettingsRepository {
             float_default_mode,
             float_hover_preview,
             autostart_enabled,
+            ui_theme,
+            ui_locale,
         })
     }
 
@@ -77,6 +86,12 @@ impl SettingsRepository {
                 "autostart.enabled",
                 if value { "true" } else { "false" },
             )?;
+        }
+        if let Some(theme) = dto.ui_theme {
+            Self::set_value(db, "ui.theme", theme.as_str())?;
+        }
+        if let Some(locale) = dto.ui_locale {
+            Self::set_value(db, "ui.locale", locale.as_str())?;
         }
         Self::get(db)
     }

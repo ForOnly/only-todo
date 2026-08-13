@@ -16,20 +16,26 @@ const emit = defineEmits<{
 
 <template>
   <header class="header">
-    <div class="brand">Only Todo</div>
+    <div class="brand">{{ $t("common.brand") }}</div>
     <div class="actions">
       <input
         id="workbench-search"
         class="search"
         type="search"
-        placeholder="搜索任务…  /"
+        :placeholder="$t('header.searchPlaceholder')"
         :value="keyword"
         @input="emit('update:keyword', ($event.target as HTMLInputElement).value)"
         @keydown.enter="emit('search')"
       />
-      <AppButton variant="primary" @click="emit('create')">+ 新建</AppButton>
-      <AppButton variant="ghost" @click="emit('openCompanion')">打开伴侣</AppButton>
-      <AppButton variant="ghost" @click="emit('settings')">设置</AppButton>
+      <AppButton variant="primary" @click="emit('create')">{{ $t("header.newTodo") }}</AppButton>
+      <AppButton
+        variant="ghost"
+        :title="$t('header.openCompanionTitle')"
+        @click="emit('openCompanion')"
+      >
+        {{ $t("header.openCompanion") }}
+      </AppButton>
+      <AppButton variant="ghost" @click="emit('settings')">{{ $t("header.settings") }}</AppButton>
     </div>
   </header>
 </template>
@@ -41,16 +47,16 @@ const emit = defineEmits<{
   justify-content: space-between;
   gap: 16px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-muted) 100%);
 }
 
 .brand {
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-ui);
   font-weight: 750;
   font-size: 18px;
   letter-spacing: -0.02em;
-  color: #0f172a;
+  color: var(--color-text);
   flex-shrink: 0;
 }
 
@@ -65,15 +71,19 @@ const emit = defineEmits<{
 .search {
   width: min(280px, 40vw);
   padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font: inherit;
-  background: #fff;
+  color: var(--color-text);
+  background: var(--color-surface);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .search:focus {
   outline: none;
-  border-color: #0f172a;
-  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 </style>

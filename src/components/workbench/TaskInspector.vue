@@ -1,22 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
 import {
-  PRIORITY_LABELS,
   PRIORITY_OPTIONS,
-  REPEAT_TYPE_LABELS,
   REPEAT_TYPE_OPTIONS,
   SNOOZE_OPTIONS,
-  STATUS_LABELS,
   type ReminderDto,
   type RepeatType,
   type TodoDto,
   type TodoStatus,
 } from "@/api/types";
+import type { SaveStatus } from "@/composables/useTodoDetail";
 import { formatDate, toLocalDatetimeInput } from "@/utils/date";
-import { useStatusActions } from "@/utils/statusActions";
+import { statusActionLabel, useStatusActions } from "@/utils/statusActions";
 
 const props = defineProps<{
   detail: TodoDto | null;
@@ -26,6 +25,7 @@ const props = defineProps<{
   editDueDate: string;
   editTags: string[];
   saving: boolean;
+  saveStatus: SaveStatus;
   error: string | null;
   reminders: ReminderDto[];
   remindersLoading: boolean;
@@ -50,6 +50,8 @@ const emit = defineEmits<{
   snoozeReminder: [id: string, minutes: number];
 }>();
 
+const { t } = useI18n();
+
 const tagInput = ref("");
 const reminderInput = ref("");
 const repeatType = ref<RepeatType>("none");
@@ -62,12 +64,25 @@ const statusRef = computed(() =>
 );
 const { actions } = useStatusActions(statusRef);
 
+const autosaveLabel = computed(() => {
+  switch (props.saveStatus) {
+    case "saving":
+      return t("inspector.autosaveSaving");
+    case "saved":
+      return t("inspector.autosaveSaved");
+    case "dirty":
+      return t("inspector.autosaveDirty");
+    default:
+      return t("inspector.autosaveIdle");
+  }
+});
+
 const tagSuggestions = computed(() => {
-  const current = new Set(props.editTags.map((t) => t.toLowerCase()));
+  const current = new Set(props.editTags.map((tag) => tag.toLowerCase()));
   const q = tagInput.value.trim().toLowerCase();
   return props.suggestedTags
-    .filter((t) => !current.has(t.toLowerCase()))
-    .filter((t) => !q || t.toLowerCase().includes(q))
+    .filter((tag) => !current.has(tag.toLowerCase()))
+    .filter((tag) => !q || tag.toLowerCase().includes(q))
     .slice(0, 8);
 });
 
@@ -127,36 +142,54 @@ function cancelEditReminder() {
 </script>
 
 <template>
-  <aside class="inspector" aria-label="任务编辑">
+  <aside class="inspector" :aria-label="$t('inspector.aria')">
     <div v-if="!detail" class="empty">
-      <p class="empty-title">选择一条任务</p>
-      <p class="empty-hint">在列表中点选即可在此编辑；字段会自动保存。</p>
+      <p class="empty-title">{{ $t("inspector.emptyTitle") }}</p>
+      <p class="empty-hint">{{ $t("inspector.emptyHint") }}</p>
     </div>
 
     <template v-else>
       <header class="inspector-header">
         <div class="header-left">
-          <span class="status-pill">{{ STATUS_LABELS[detail.status] }}</span>
-          <span v-if="saving" class="save-hint">保存中…</span>
-          <span v-else class="save-hint muted">自动保存</span>
+          <span class="status-pill">{{ $t(`status.${detail.status}`) }}</span>
+          <span
+            class="save-hint"
+            :class="{
+              muted: saveStatus === 'idle',
+              dirty: saveStatus === 'dirty',
+              saving: saveStatus === 'saving',
+              saved: saveStatus === 'saved',
+            }"
+          >
+            {{ autosaveLabel }}
+          </span>
         </div>
-        <button type="button" class="close-btn" aria-label="关闭" @click="emit('close')">×</button>
+        <button
+          type="button"
+          class="close-btn"
+          :aria-label="$t('common.close')"
+          @click="emit('close')"
+        >
+          ×
+        </button>
       </header>
 
       <div class="inspector-body">
         <AppErrorBanner v-if="error" :message="error" />
 
         <template v-if="isDeleted">
-          <p class="trash-note">此任务在回收站中。可恢复，或保持删除。</p>
+          <p class="trash-note">{{ $t("inspector.trashNote") }}</p>
           <div class="action-row">
-            <AppButton variant="primary" @click="emit('restore')">恢复</AppButton>
+            <AppButton variant="primary" @click="emit('restore')">
+              {{ $t("inspector.restore") }}
+            </AppButton>
           </div>
           <label class="app-field">
-            <span>标题</span>
+            <span>{{ $t("inspector.title") }}</span>
             <input :value="editTitle" disabled />
           </label>
           <label class="app-field">
-            <span>描述</span>
+            <span>{{ $t("inspector.description") }}</span>
             <textarea rows="4" :value="editDescription" disabled />
           </label>
         </template>
@@ -169,13 +202,13 @@ function cancelEditReminder() {
               :variant="action.target === 'Done' ? 'primary' : 'ghost'"
               @click="emit('transition', action.target)"
             >
-              {{ action.label }}
+              {{ statusActionLabel(detail!.status, action.target, t) }}
             </AppButton>
-            <AppButton variant="danger" @click="emit('remove')">删除</AppButton>
+            <AppButton variant="danger" @click="emit('remove')">{{ $t("inspector.remove") }}</AppButton>
           </div>
 
           <label class="app-field">
-            <span>标题</span>
+            <span>{{ $t("inspector.title") }}</span>
             <input
               :value="editTitle"
               maxlength="200"
@@ -187,7 +220,7 @@ function cancelEditReminder() {
           </label>
 
           <label class="app-field">
-            <span>描述</span>
+            <span>{{ $t("inspector.description") }}</span>
             <textarea
               rows="5"
               maxlength="5000"
@@ -200,7 +233,7 @@ function cancelEditReminder() {
           </label>
 
           <label class="app-field">
-            <span>优先级</span>
+            <span>{{ $t("inspector.priority") }}</span>
             <select
               :value="editPriority"
               @change="
@@ -212,13 +245,13 @@ function cancelEditReminder() {
               "
             >
               <option v-for="p in PRIORITY_OPTIONS" :key="p" :value="p">
-                {{ PRIORITY_LABELS[p] }}
+                {{ $t(`priority.${p}`) }}
               </option>
             </select>
           </label>
 
           <label class="app-field">
-            <span>截止日期</span>
+            <span>{{ $t("inspector.dueDate") }}</span>
             <input
               type="datetime-local"
               :value="editDueDate"
@@ -230,11 +263,16 @@ function cancelEditReminder() {
           </label>
 
           <div class="app-field">
-            <span>标签</span>
+            <span>{{ $t("inspector.tags") }}</span>
             <div class="chips">
               <span v-for="tag in editTags" :key="tag" class="chip">
                 {{ tag }}
-                <button type="button" class="chip-x" :aria-label="`移除 ${tag}`" @click="removeTag(tag)">
+                <button
+                  type="button"
+                  class="chip-x"
+                  :aria-label="$t('inspector.removeTag', { tag })"
+                  @click="removeTag(tag)"
+                >
                   ×
                 </button>
               </span>
@@ -242,7 +280,7 @@ function cancelEditReminder() {
             <input
               v-model="tagInput"
               type="text"
-              placeholder="输入后回车添加"
+              :placeholder="$t('inspector.tagPlaceholder')"
               @keydown="onTagKeydown"
             />
             <div v-if="tagSuggestions.length" class="suggestions">
@@ -259,29 +297,33 @@ function cancelEditReminder() {
           </div>
 
           <section class="reminders">
-            <h3>提醒</h3>
+            <h3>{{ $t("inspector.reminders") }}</h3>
             <AppErrorBanner v-if="remindersError" :message="remindersError" />
-            <div v-if="remindersLoading" class="muted">加载提醒…</div>
+            <div v-if="remindersLoading" class="muted">{{ $t("inspector.loadingReminders") }}</div>
             <ul v-else class="reminder-list">
               <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
                 <template v-if="editingReminderId === reminder.id">
                   <input v-model="editingReminderAt" type="datetime-local" />
                   <div class="reminder-actions">
-                    <AppButton variant="primary" @click="commitEditReminder">保存</AppButton>
-                    <AppButton variant="ghost" @click="cancelEditReminder">取消</AppButton>
+                    <AppButton variant="primary" @click="commitEditReminder">
+                      {{ $t("common.save") }}
+                    </AppButton>
+                    <AppButton variant="ghost" @click="cancelEditReminder">
+                      {{ $t("common.cancel") }}
+                    </AppButton>
                   </div>
                 </template>
                 <template v-else>
                   <div class="reminder-main" :class="{ disabled: !reminder.enabled }">
                     <span>{{ formatDate(reminder.nextTriggerAt) }}</span>
-                    <span class="muted">{{ REPEAT_TYPE_LABELS[reminder.repeatType] }}</span>
-                    <span v-if="!reminder.enabled" class="muted">已关闭</span>
+                    <span class="muted">{{ $t(`repeat.${reminder.repeatType}`) }}</span>
+                    <span v-if="!reminder.enabled" class="muted">{{ $t("inspector.disabled") }}</span>
                     <span
                       v-else-if="reminder.snoozeCount > 0"
                       class="muted"
-                      title="原定时间"
+                      :title="$t('inspector.originalTime')"
                     >
-                      原定 {{ formatDate(reminder.remindAt) }}
+                      {{ $t("inspector.originalTimeLabel", { time: formatDate(reminder.remindAt) }) }}
                     </span>
                   </div>
                   <div class="reminder-actions">
@@ -290,7 +332,7 @@ function cancelEditReminder() {
                       :disabled="!reminder.enabled"
                       @click="startEditReminder(reminder)"
                     >
-                      改期
+                      {{ $t("inspector.reschedule") }}
                     </AppButton>
                     <select
                       class="snooze"
@@ -304,26 +346,28 @@ function cancelEditReminder() {
                         ($event.target as HTMLSelectElement).value = '';
                       "
                     >
-                      <option value="" disabled selected>延后</option>
-                      <option v-for="m in SNOOZE_OPTIONS" :key="m" :value="m">{{ m }} 分</option>
+                      <option value="" disabled selected>{{ $t("inspector.snooze") }}</option>
+                      <option v-for="m in SNOOZE_OPTIONS" :key="m" :value="m">
+                        {{ $t("inspector.snoozeMinutes", { n: m }) }}
+                      </option>
                     </select>
                     <AppButton variant="danger" @click="emit('removeReminder', reminder.id)">
-                      删
+                      {{ $t("inspector.deleteShort") }}
                     </AppButton>
                   </div>
                 </template>
               </li>
-              <li v-if="!reminders.length" class="muted">暂无提醒</li>
+              <li v-if="!reminders.length" class="muted">{{ $t("inspector.noReminders") }}</li>
             </ul>
 
             <div class="add-reminder">
               <input v-model="reminderInput" type="datetime-local" />
               <select v-model="repeatType">
                 <option v-for="rt in REPEAT_TYPE_OPTIONS" :key="rt" :value="rt">
-                  {{ REPEAT_TYPE_LABELS[rt] }}
+                  {{ $t(`repeat.${rt}`) }}
                 </option>
               </select>
-              <AppButton variant="primary" @click="submitReminder">添加</AppButton>
+              <AppButton variant="primary" @click="submitReminder">{{ $t("common.add") }}</AppButton>
             </div>
           </section>
         </template>
@@ -340,7 +384,7 @@ function cancelEditReminder() {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--color-surface);
   min-height: 0;
 }
 
@@ -349,7 +393,7 @@ function cancelEditReminder() {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .header-left {
@@ -362,20 +406,28 @@ function cancelEditReminder() {
   font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #334155;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
 }
 
 .save-hint {
   font-size: 12px;
-  color: #2563eb;
+  color: var(--color-accent);
 }
 
 .save-hint.muted,
 .muted {
-  color: #94a3b8;
+  color: var(--color-muted);
   font-size: 12px;
+}
+
+.save-hint.dirty {
+  color: var(--color-overdue);
+}
+
+.save-hint.saved {
+  color: var(--color-success);
 }
 
 .close-btn {
@@ -383,9 +435,14 @@ function cancelEditReminder() {
   background: transparent;
   font-size: 22px;
   line-height: 1;
-  color: #64748b;
+  color: var(--color-muted);
   cursor: pointer;
   padding: 0 4px;
+  transition: color var(--transition-fast);
+}
+
+.close-btn:hover {
+  color: var(--color-text);
 }
 
 .inspector-body {
@@ -404,7 +461,7 @@ function cancelEditReminder() {
 .trash-note {
   margin: 0 0 12px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-muted);
 }
 
 .chips {
@@ -420,17 +477,17 @@ function cancelEditReminder() {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
-  background: #f1f5f9;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
   font-size: 12px;
-  color: #334155;
+  color: var(--color-text-secondary);
 }
 
 .chip-x {
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #64748b;
+  color: var(--color-muted);
   padding: 0;
   font-size: 14px;
   line-height: 1;
@@ -444,24 +501,25 @@ function cancelEditReminder() {
 }
 
 .suggest {
-  border: 1px solid #e2e8f0;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   border-radius: 4px;
   padding: 2px 8px;
   font: inherit;
   font-size: 12px;
-  color: #475569;
+  color: var(--color-text-secondary);
   cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
 .suggest:hover {
-  background: #f8fafc;
+  background: var(--color-surface-muted);
 }
 
 .reminders h3 {
   margin: 8px 0 10px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-muted);
 }
 
 .reminder-list {
@@ -475,8 +533,8 @@ function cancelEditReminder() {
 
 .reminder-item {
   padding: 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -502,10 +560,12 @@ function cancelEditReminder() {
 
 .snooze {
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font: inherit;
   font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 
 .add-reminder {
@@ -522,13 +582,13 @@ function cancelEditReminder() {
 .empty-title {
   margin: 0 0 6px;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text-secondary);
 }
 
 .empty-hint {
   margin: 0;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--color-muted);
   line-height: 1.5;
 }
 </style>

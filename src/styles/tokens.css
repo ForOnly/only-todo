@@ -1,0 +1,103 @@
+/* 冷静工具风 — 语义色与刻度（light / dark） */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg: #eef2f7;
+  --color-bg-accent: #e2e8f0;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-text: #0f172a;
+  --color-text-secondary: #334155;
+  --color-muted: #64748b;
+  --color-accent: #1d4ed8;
+  --color-accent-hover: #1e40af;
+  --color-accent-soft: rgba(29, 78, 216, 0.12);
+  --color-on-accent: #ffffff;
+  --color-danger: #dc2626;
+  --color-danger-border: #fecaca;
+  --color-danger-bg: #fef2f2;
+  --color-overdue: #b91c1c;
+  --color-success: #15803d;
+  --color-overlay: rgba(15, 23, 42, 0.45);
+
+  --color-priority-urgent: #dc2626;
+  --color-priority-high: #ea580c;
+  --color-priority-medium: #1d4ed8;
+  --color-priority-low: #94a3b8;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+
+  --font-ui: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --focus-ring: 0 0 0 3px var(--color-accent-soft);
+  --transition-fast: 0.15s ease;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0b1220;
+  --color-bg-accent: #111827;
+  --color-surface: #151c2c;
+  --color-surface-muted: #1a2336;
+  --color-border: #2a3548;
+  --color-border-strong: #3b4a63;
+  --color-text: #e8eef8;
+  --color-text-secondary: #cbd5e1;
+  --color-muted: #94a3b8;
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-accent-soft: rgba(59, 130, 246, 0.22);
+  --color-on-accent: #0b1220;
+  --color-danger: #f87171;
+  --color-danger-border: #7f1d1d;
+  --color-danger-bg: #3f1515;
+  --color-overdue: #fca5a5;
+  --color-success: #4ade80;
+  --color-overlay: rgba(0, 0, 0, 0.55);
+
+  --color-priority-urgent: #f87171;
+  --color-priority-high: #fb923c;
+  --color-priority-medium: #60a5fa;
+  --color-priority-low: #64748b;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+  outline: none;
+}

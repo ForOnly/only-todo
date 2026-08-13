@@ -12,14 +12,14 @@ const emit = defineEmits<{
   selectView: [view: WorkbenchView, tag?: string | null];
 }>();
 
-const primaryViews: { id: WorkbenchView; label: string }[] = [
-  { id: "today", label: "今日" },
-  { id: "overdue", label: "逾期" },
-  { id: "doing", label: "进行中" },
-  { id: "all", label: "全部" },
-  { id: "done", label: "已完成" },
-  { id: "archived", label: "归档" },
-  { id: "trash", label: "回收站" },
+const primaryViewIds: WorkbenchView[] = [
+  "today",
+  "overdue",
+  "doing",
+  "all",
+  "done",
+  "archived",
+  "trash",
 ];
 
 function isActive(id: WorkbenchView): boolean {
@@ -32,21 +32,21 @@ function isTagActive(tag: string): boolean {
 </script>
 
 <template>
-  <aside class="view-sidebar" aria-label="视图">
+  <aside class="view-sidebar" :aria-label="$t('views.navLabel')">
     <nav class="nav">
       <button
-        v-for="item in primaryViews"
-        :key="item.id"
+        v-for="id in primaryViewIds"
+        :key="id"
         type="button"
         class="nav-item"
-        :class="{ active: isActive(item.id) }"
-        @click="emit('selectView', item.id)"
+        :class="{ active: isActive(id) }"
+        @click="emit('selectView', id)"
       >
-        <span>{{ item.label }}</span>
+        <span>{{ $t(`views.${id}`) }}</span>
         <span
-          v-if="item.id === 'overdue' && (overdueCount ?? 0) > 0"
+          v-if="id === 'overdue' && (overdueCount ?? 0) > 0"
           class="badge"
-          :title="`${overdueCount} 条逾期`"
+          :title="$t('views.overdueBadge', { count: overdueCount })"
         >
           {{ overdueCount }}
         </span>
@@ -54,7 +54,7 @@ function isTagActive(tag: string): boolean {
     </nav>
 
     <div v-if="allTags.length" class="tags-block">
-      <h3 class="tags-title">标签</h3>
+      <h3 class="tags-title">{{ $t("views.tags") }}</h3>
       <button
         v-for="tag in allTags"
         :key="tag"
@@ -73,8 +73,8 @@ function isTagActive(tag: string): boolean {
 .view-sidebar {
   width: 168px;
   flex-shrink: 0;
-  border-right: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   padding: 12px 8px;
   overflow-y: auto;
 }
@@ -93,45 +93,51 @@ function isTagActive(tag: string): boolean {
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #334155;
+  color: var(--color-text-secondary);
   font: inherit;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
 .nav-item:hover {
-  background: #e2e8f0;
+  background: var(--color-bg-accent);
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .nav-item.active {
-  background: #0f172a;
-  color: #f8fafc;
+  background: var(--color-accent-soft);
+  color: var(--color-text);
   font-weight: 600;
 }
 
 .badge {
   min-width: 18px;
   padding: 1px 6px;
-  border-radius: 999px;
-  background: #dc2626;
-  color: #fff;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger);
+  color: var(--color-on-accent);
   font-size: 11px;
   font-weight: 600;
   text-align: center;
 }
 
 .nav-item.active .badge {
-  background: #fca5a5;
-  color: #7f1d1d;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .tags-block {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
 }
 
 .tags-title {
@@ -140,10 +146,10 @@ function isTagActive(tag: string): boolean {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 .nav-item.tag {
-  color: #475569;
+  color: var(--color-muted);
 }
 </style>

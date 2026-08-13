@@ -8,26 +8,29 @@
 
 .app-field span {
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 .app-field input,
 .app-field textarea,
 .app-field select {
   padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font: inherit;
-  background: #fff;
-  transition: border-color 0.15s;
+  color: var(--color-text);
+  background: var(--color-surface);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .app-field input:focus,
 .app-field textarea:focus,
 .app-field select:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
 .app-field textarea {
@@ -37,19 +40,21 @@
 
 .app-btn {
   padding: 8px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   font: inherit;
   font-size: 14px;
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .app-btn:hover:not(:disabled) {
-  background: #f9fafb;
+  background: var(--color-surface-muted);
 }
 
 .app-btn:disabled {
@@ -58,13 +63,14 @@
 }
 
 .app-btn--primary {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-color: var(--color-accent);
 }
 
 .app-btn--primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
 }
 
 .app-btn--ghost {
@@ -72,8 +78,8 @@
 }
 
 .app-btn--danger {
-  color: #dc2626;
-  border-color: #fecaca;
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
 }
 
 .app-modal-actions {

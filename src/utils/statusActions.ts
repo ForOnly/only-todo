@@ -1,10 +1,27 @@
 /** 状态机合法边 — 权威定义在 Rust domain/status.rs，经 get_allowed_transitions 下发 */
 import { ref, watch, type Ref } from "vue";
+import type { Composer } from "vue-i18n";
 
 import { getAllowedTransitions } from "@/api/todos";
 import type { StatusActionDto, TodoStatus } from "@/api/types";
 
 export type StatusAction = StatusActionDto;
+
+/** 忽略后端中文 label，按 from→to 映射到 i18n */
+export function statusActionLabel(
+  from: TodoStatus,
+  to: TodoStatus,
+  t: Composer["t"],
+): string {
+  if (to === "Doing") return t("statusAction.start");
+  if (to === "Done") return t("statusAction.complete");
+  if (to === "Archived") return t("statusAction.archive");
+  if (to === "Todo") {
+    if (from === "Doing") return t("statusAction.backToTodo");
+    return t("statusAction.reopen");
+  }
+  return to;
+}
 
 /** 供 Inspector / 伴侣详情：随 status 拉取后端动词列表 */
 export function useStatusActions(status: Ref<TodoStatus | null | undefined>): {

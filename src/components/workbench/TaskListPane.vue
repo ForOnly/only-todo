@@ -1,17 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
-import {
-  PRIORITY_LABELS,
-  STATUS_LABELS,
-  type SortBy,
-  type SortOrder,
-  type TodoDto,
-  type WorkbenchView,
-} from "@/api/types";
+import type { SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
 import { formatDueDate, isOverdue } from "@/utils/date";
-import { sortOptionsForView } from "@/utils/listSort";
+import { sortKeysForView } from "@/utils/listSort";
 
 const props = defineProps<{
   todos: TodoDto[];
@@ -32,56 +26,60 @@ const emit = defineEmits<{
   prevPage: [];
   nextPage: [];
   changeSort: [sortBy: SortBy];
+  toggleSortOrder: [];
   emptyAction: [action: "create" | "all"];
 }>();
 
-const sortOptions = computed(() => sortOptionsForView(props.view));
+const { t } = useI18n();
+
+const sortOptions = computed(() => sortKeysForView(props.view));
 
 const viewTitle = computed(() => {
   if (props.view === "tag" && props.activeTag) {
-    return `标签 · ${props.activeTag}`;
+    return t("views.tagTitle", { tag: props.activeTag });
   }
-  const titles: Record<WorkbenchView, string> = {
-    today: "今日",
-    overdue: "逾期",
-    doing: "进行中",
-    all: "全部",
-    done: "已完成",
-    archived: "归档",
-    trash: "回收站",
-    tag: "标签",
-  };
-  return titles[props.view];
+  return t(`views.${props.view}`);
 });
 
-function emptyCopy(): { title: string; hint: string; cta?: "create" | "all"; ctaLabel?: string } {
+const emptyCopy = computed(() => {
   switch (props.view) {
     case "today":
       return {
-        title: "今天还没有任务",
-        hint: "添加一条今日任务，或从全部中挑选。今日列表最多展示 200 条合并结果。",
-        cta: "create",
-        ctaLabel: "添加今日任务",
+        title: t("list.empty.todayTitle"),
+        hint: t("list.empty.todayHint"),
+        cta: "create" as const,
+        ctaLabel: t("list.empty.todayCta"),
       };
     case "overdue":
-      return { title: "没有逾期任务", hint: "保持这个状态就很好。", cta: "all" };
+      return {
+        title: t("list.empty.overdueTitle"),
+        hint: t("list.empty.overdueHint"),
+        cta: "all" as const,
+      };
     case "doing":
-      return { title: "没有进行中的任务", hint: "在详情里点「开始」即可进入此视图。", cta: "all" };
+      return {
+        title: t("list.empty.doingTitle"),
+        hint: t("list.empty.doingHint"),
+        cta: "all" as const,
+      };
     case "trash":
-      return { title: "回收站为空", hint: "删除的任务会出现在这里。" };
+      return { title: t("list.empty.trashTitle"), hint: t("list.empty.trashHint") };
     case "archived":
-      return { title: "暂无归档", hint: "归档的任务会集中在此。" };
+      return { title: t("list.empty.archivedTitle"), hint: t("list.empty.archivedHint") };
     case "done":
-      return { title: "还没有完成记录", hint: "完成任务后会出现在这里。" };
+      return { title: t("list.empty.doneTitle"), hint: t("list.empty.doneHint") };
     default:
       return {
-        title: "暂无任务",
-        hint: "按 n 或点新建开始。",
-        cta: "create",
-        ctaLabel: "添加任务",
+        title: t("list.empty.defaultTitle"),
+        hint: t("list.empty.defaultHint"),
+        cta: "create" as const,
+        ctaLabel: t("list.empty.defaultCta"),
       };
   }
-}
+});
+
+const showLoadingHint = computed(() => props.loading && props.todos.length === 0);
+const isRefreshing = computed(() => props.loading && props.todos.length > 0);
 
 function canToggle(todo: TodoDto): boolean {
   return !todo.deletedAt && (todo.status === "Todo" || todo.status === "Doing" || todo.status === "Done");
@@ -105,35 +103,46 @@ function onCheck(todo: TodoDto, event: Event) {
         <h2>{{ viewTitle }}</h2>
         <span class="count">{{ total }}</span>
       </div>
-      <label class="sort">
-        <span>排序</span>
-        <select
-          :value="sortBy"
-          @change="emit('changeSort', ($event.target as HTMLSelectElement).value as SortBy)"
+      <div class="sort-controls">
+        <label class="sort">
+          <span>{{ $t("list.sort") }}</span>
+          <select
+            :value="sortBy"
+            @change="emit('changeSort', ($event.target as HTMLSelectElement).value as SortBy)"
+          >
+            <option v-for="key in sortOptions" :key="key" :value="key">
+              {{ $t(`sort.${key}`) }}
+            </option>
+          </select>
+        </label>
+        <button
+          type="button"
+          class="sort-order-btn"
+          :title="$t('list.toggleSortOrder')"
+          :aria-label="sortOrder === 'asc' ? $t('list.sortAsc') : $t('list.sortDesc')"
+          @click="emit('toggleSortOrder')"
         >
-          <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-      </label>
+          {{ sortOrder === "asc" ? "↑" : "↓" }}
+        </button>
+      </div>
     </header>
 
-    <div v-if="loading" class="hint">加载中...</div>
+    <div v-if="showLoadingHint" class="hint">{{ $t("common.loading") }}</div>
 
-    <ul v-else class="todo-list">
+    <ul v-else class="todo-list" :class="{ refreshing: isRefreshing }">
       <li v-if="todos.length === 0" class="empty">
-        <p class="empty-title">{{ emptyCopy().title }}</p>
-        <p class="empty-hint">{{ emptyCopy().hint }}</p>
-        <div v-if="emptyCopy().cta" class="empty-actions">
+        <p class="empty-title">{{ emptyCopy.title }}</p>
+        <p class="empty-hint">{{ emptyCopy.hint }}</p>
+        <div v-if="emptyCopy.cta" class="empty-actions">
           <AppButton
-            v-if="emptyCopy().cta === 'create'"
+            v-if="emptyCopy.cta === 'create'"
             variant="primary"
             @click="emit('emptyAction', 'create')"
           >
-            {{ emptyCopy().ctaLabel ?? "添加任务" }}
+            {{ emptyCopy.ctaLabel }}
           </AppButton>
           <AppButton v-else variant="ghost" @click="emit('emptyAction', 'all')">
-            查看全部
+            {{ $t("list.viewAll") }}
           </AppButton>
         </div>
       </li>
@@ -155,17 +164,17 @@ function onCheck(todo: TodoDto, event: Event) {
           type="checkbox"
           :checked="todo.status === 'Done'"
           :disabled="!canToggle(todo)"
-          :aria-label="todo.status === 'Done' ? '标记未完成' : '标记完成'"
+          :aria-label="todo.status === 'Done' ? $t('list.markUndone') : $t('list.markDone')"
           @click="onCheck(todo, $event)"
         />
         <div class="body">
           <div class="title-row">
             <span class="title">{{ todo.title }}</span>
-            <span v-if="todo.status === 'Doing'" class="doing-mark">进行中</span>
+            <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
           </div>
           <div class="meta">
-            <span class="priority">{{ PRIORITY_LABELS[todo.priority] }}</span>
-            <span>{{ STATUS_LABELS[todo.status] }}</span>
+            <span class="priority">{{ $t(`priority.${todo.priority}`) }}</span>
+            <span>{{ $t(`status.${todo.status}`) }}</span>
             <span
               v-if="todo.dueDate"
               :class="{ 'due-overdue': isOverdue(todo.dueDate, todo.status) }"
@@ -179,9 +188,11 @@ function onCheck(todo: TodoDto, event: Event) {
     </ul>
 
     <footer v-if="view !== 'today' && total > pageSize" class="pagination">
-      <AppButton :disabled="page <= 1" @click="emit('prevPage')">上一页</AppButton>
+      <AppButton :disabled="page <= 1" @click="emit('prevPage')">{{ $t("list.prevPage") }}</AppButton>
       <span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span>
-      <AppButton :disabled="page * pageSize >= total" @click="emit('nextPage')">下一页</AppButton>
+      <AppButton :disabled="page * pageSize >= total" @click="emit('nextPage')">
+        {{ $t("list.nextPage") }}
+      </AppButton>
     </footer>
   </section>
 </template>
@@ -192,8 +203,8 @@ function onCheck(todo: TodoDto, event: Event) {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  background: #fff;
-  border-right: 1px solid #e2e8f0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
 }
 
 .list-header {
@@ -202,7 +213,7 @@ function onCheck(todo: TodoDto, event: Event) {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .title-block {
@@ -215,12 +226,18 @@ function onCheck(todo: TodoDto, event: Event) {
   margin: 0;
   font-size: 16px;
   font-weight: 650;
-  color: #0f172a;
+  color: var(--color-text);
 }
 
 .count {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-muted);
+}
+
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .sort {
@@ -228,15 +245,33 @@ function onCheck(todo: TodoDto, event: Event) {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-muted);
 }
 
 .sort select {
   padding: 4px 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font: inherit;
-  background: #fff;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.sort-order-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.sort-order-btn:hover {
+  background: var(--color-surface-muted);
 }
 
 .todo-list {
@@ -245,6 +280,11 @@ function onCheck(todo: TodoDto, event: Event) {
   padding: 0;
   overflow-y: auto;
   flex: 1;
+  transition: opacity var(--transition-fast);
+}
+
+.todo-list.refreshing {
+  opacity: 0.72;
 }
 
 .todo-item {
@@ -253,25 +293,26 @@ function onCheck(todo: TodoDto, event: Event) {
   align-items: flex-start;
   gap: 10px;
   padding: 12px 16px 12px 14px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border);
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .todo-item:hover {
-  background: #f8fafc;
+  background: var(--color-surface-muted);
 }
 
 .todo-item.active {
-  background: #f1f5f9;
+  background: var(--color-accent-soft);
 }
 
 .todo-item.overdue .title {
-  color: #b91c1c;
+  color: var(--color-overdue);
 }
 
 .todo-item.done .title {
   text-decoration: line-through;
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 .priority-bar {
@@ -280,20 +321,20 @@ function onCheck(todo: TodoDto, event: Event) {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #cbd5e1;
+  background: var(--color-priority-low);
 }
 
 .priority-bar[data-priority="Urgent"] {
-  background: #dc2626;
+  background: var(--color-priority-urgent);
 }
 .priority-bar[data-priority="High"] {
-  background: #ea580c;
+  background: var(--color-priority-high);
 }
 .priority-bar[data-priority="Medium"] {
-  background: #2563eb;
+  background: var(--color-priority-medium);
 }
 .priority-bar[data-priority="Low"] {
-  background: #94a3b8;
+  background: var(--color-priority-low);
 }
 
 .check {
@@ -315,7 +356,7 @@ function onCheck(todo: TodoDto, event: Event) {
 
 .title {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -326,8 +367,8 @@ function onCheck(todo: TodoDto, event: Event) {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 4px;
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .meta {
@@ -336,19 +377,19 @@ function onCheck(todo: TodoDto, event: Event) {
   gap: 8px;
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--color-muted);
 }
 
 .due-overdue {
-  color: #dc2626;
+  color: var(--color-overdue);
   font-weight: 600;
 }
 
 .chip {
   padding: 1px 6px;
   border-radius: 4px;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
 }
 
 .empty {
@@ -360,13 +401,13 @@ function onCheck(todo: TodoDto, event: Event) {
   margin: 0 0 6px;
   font-size: 15px;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-text-secondary);
 }
 
 .empty-hint {
   margin: 0 0 16px;
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 .empty-actions {
@@ -380,14 +421,14 @@ function onCheck(todo: TodoDto, event: Event) {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
   font-size: 13px;
-  color: #64748b;
+  color: var(--color-muted);
 }
 
 .hint {
   padding: 24px;
-  color: #64748b;
+  color: var(--color-muted);
   text-align: center;
 }
 </style>

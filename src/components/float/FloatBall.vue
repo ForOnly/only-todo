@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps<{
   activeCount: number;
@@ -10,6 +11,8 @@ const emit = defineEmits<{
   click: [];
   "drag-start": [];
 }>();
+
+const { t } = useI18n();
 
 const DRAG_THRESHOLD = 10;
 
@@ -30,9 +33,9 @@ const badge = computed(() => {
 });
 
 const tooltip = computed(() => {
-  const parts = [`${props.activeCount} 待办`];
-  if (props.overdueCount > 0) parts.push(`${props.overdueCount} 逾期`);
-  return `${parts.join(" · ")} · 单击打开，拖到边缘可贴边`;
+  const overdue =
+    props.overdueCount > 0 ? t("companion.ballOverdue", { n: props.overdueCount }) : "";
+  return t("companion.ballTitle", { active: props.activeCount, overdue });
 });
 
 function onPointerDown(event: PointerEvent) {
@@ -91,6 +94,7 @@ function onPointerCancel(event: PointerEvent) {
     type="button"
     class="float-ball-host"
     :title="tooltip"
+    :aria-label="tooltip"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -121,24 +125,23 @@ function onPointerCancel(event: PointerEvent) {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: #2563eb;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+  background: var(--color-accent);
+  box-shadow: var(--shadow-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--color-on-accent);
   font-size: 14px;
   font-weight: 600;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-ui);
 }
 
 .float-ball.urgency-active {
-  background: #2563eb;
+  background: var(--color-accent);
 }
 
 .float-ball.urgency-overdue {
-  background: #dc2626;
-  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.45);
+  background: var(--color-priority-urgent);
 }
 
 .badge {

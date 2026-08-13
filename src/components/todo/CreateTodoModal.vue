@@ -2,7 +2,7 @@
 import { nextTick, ref, watch } from "vue";
 
 import type { CreateTodoDto, CreateTodoFormModel } from "@/api/types";
-import { DEFAULT_CREATE_TODO_FORM, PRIORITY_LABELS, PRIORITY_OPTIONS } from "@/api/types";
+import { DEFAULT_CREATE_TODO_FORM, PRIORITY_OPTIONS } from "@/api/types";
 import { fromLocalDatetimeInput } from "@/utils/date";
 import { validateCreateTodoForm } from "@/utils/validation";
 import AppButton from "@/components/common/AppButton.vue";
@@ -107,56 +107,59 @@ defineExpose({ resetSubmitting, setError });
     :open="open"
     :compact="compact"
     :teleport="teleport"
-    title="新建任务"
+    :title="$t('create.title')"
     @close="emit('close')"
   >
     <AppErrorBanner v-if="error" :message="error" />
 
     <label class="app-field">
-      <span>标题 <span class="required">*</span></span>
+      <span>
+        {{ $t("create.titleLabel") }}
+        <span class="required">{{ $t("create.titleRequired") }}</span>
+      </span>
       <input
         ref="titleInput"
         v-model="form.title"
         type="text"
-        placeholder="输入任务标题"
+        :placeholder="$t('create.titlePlaceholder')"
         maxlength="200"
         @keydown.enter.prevent="handleSubmit"
       />
     </label>
 
     <label class="app-field">
-      <span>描述</span>
+      <span>{{ $t("create.description") }}</span>
       <textarea
         v-model="form.description"
-        placeholder="可选，补充任务详情"
+        :placeholder="$t('create.descriptionPlaceholder')"
         rows="3"
         maxlength="5000"
       />
     </label>
 
     <label class="app-field">
-      <span>优先级</span>
+      <span>{{ $t("create.priority") }}</span>
       <select v-model="form.priority">
         <option v-for="p in PRIORITY_OPTIONS" :key="p" :value="p">
-          {{ PRIORITY_LABELS[p] }}
+          {{ $t(`priority.${p}`) }}
         </option>
       </select>
     </label>
 
     <label class="app-field">
-      <span>截止日期</span>
+      <span>{{ $t("create.dueDate") }}</span>
       <input v-model="form.dueDate" type="datetime-local" />
     </label>
 
     <label class="app-field">
-      <span>标签</span>
-      <input v-model="form.tagsText" type="text" placeholder="可选，逗号分隔" />
+      <span>{{ $t("create.tags") }}</span>
+      <input v-model="form.tagsText" type="text" :placeholder="$t('create.tagsPlaceholder')" />
     </label>
 
     <div class="app-modal-actions">
-      <AppButton variant="ghost" @click="emit('close')">取消</AppButton>
+      <AppButton variant="ghost" @click="emit('close')">{{ $t("common.cancel") }}</AppButton>
       <AppButton variant="primary" :disabled="submitting" @click="handleSubmit">
-        {{ submitting ? "创建中..." : "创建" }}
+        {{ submitting ? $t("common.creating") : $t("common.create") }}
       </AppButton>
     </div>
   </AppModal>
@@ -166,6 +169,6 @@ defineExpose({ resetSubmitting, setError });
 @import "../../styles/forms.css";
 
 .required {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 </style>

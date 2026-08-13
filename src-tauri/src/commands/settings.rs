@@ -23,6 +23,9 @@ pub fn update_settings(
     let autostart_changed = dto
         .autostart_enabled
         .is_some_and(|enabled| enabled != previous.autostart_enabled);
+    let locale_changed = dto
+        .ui_locale
+        .is_some_and(|locale| locale != previous.ui_locale);
 
     let previous_home = SettingsRepository::get_home_shape(&state.db)?;
     // 先落库，避免自启 OS API 失败拖垮通知/伴侣等其它设置
@@ -30,6 +33,10 @@ pub fn update_settings(
 
     if autostart_changed {
         sync_autostart_os(&app, settings.autostart_enabled);
+    }
+
+    if locale_changed {
+        crate::tray_i18n::apply_tray_locale(&app, settings.ui_locale);
     }
 
     let home_changed = settings.float_default_mode != previous_home;

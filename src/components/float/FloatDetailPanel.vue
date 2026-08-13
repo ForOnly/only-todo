@@ -1,21 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
 import {
-  PRIORITY_LABELS,
   PRIORITY_OPTIONS,
-  REPEAT_TYPE_LABELS,
   REPEAT_TYPE_OPTIONS,
-  STATUS_LABELS,
   type ReminderDto,
   type RepeatType,
   type TodoDto,
   type TodoStatus,
 } from "@/api/types";
 import { formatDate } from "@/utils/date";
-import { useStatusActions } from "@/utils/statusActions";
+import { statusActionLabel, useStatusActions } from "@/utils/statusActions";
 
 const props = defineProps<{
   detail: TodoDto;
@@ -42,6 +40,7 @@ const emit = defineEmits<{
   removeReminder: [id: string];
 }>();
 
+const { t } = useI18n();
 const reminderInput = ref("");
 const repeatType = ref<RepeatType>("none");
 const statusRef = computed(() => props.detail.status);
@@ -57,16 +56,16 @@ function submitReminder() {
 <template>
   <section class="detail-panel">
     <div class="toolbar">
-      <AppButton variant="ghost" @click="emit('close')">关闭</AppButton>
+      <AppButton variant="ghost" @click="emit('close')">{{ $t("companion.detailClose") }}</AppButton>
       <AppButton variant="primary" :disabled="saving" @click="emit('save')">
-        {{ saving ? "保存中..." : "保存" }}
+        {{ saving ? $t("common.saving") : $t("common.save") }}
       </AppButton>
     </div>
 
     <AppErrorBanner v-if="error" :message="error" />
 
     <label class="app-field">
-      <span>标题</span>
+      <span>{{ $t("companion.detailTitle") }}</span>
       <input
         :value="editTitle"
         @input="emit('update:editTitle', ($event.target as HTMLInputElement).value)"
@@ -74,7 +73,7 @@ function submitReminder() {
     </label>
 
     <label class="app-field">
-      <span>描述</span>
+      <span>{{ $t("companion.detailDescription") }}</span>
       <textarea
         rows="3"
         :value="editDescription"
@@ -83,7 +82,7 @@ function submitReminder() {
     </label>
 
     <label class="app-field">
-      <span>优先级</span>
+      <span>{{ $t("companion.detailPriority") }}</span>
       <select
         :value="editPriority"
         @change="
@@ -94,13 +93,13 @@ function submitReminder() {
         "
       >
         <option v-for="p in PRIORITY_OPTIONS" :key="p" :value="p">
-          {{ PRIORITY_LABELS[p] }}
+          {{ $t(`priority.${p}`) }}
         </option>
       </select>
     </label>
 
     <label class="app-field">
-      <span>截止日期</span>
+      <span>{{ $t("companion.detailDue") }}</span>
       <input
         type="datetime-local"
         :value="editDueDate"
@@ -109,7 +108,7 @@ function submitReminder() {
     </label>
 
     <div class="status-row">
-      <span>状态 · {{ STATUS_LABELS[detail.status] }}</span>
+      <span>{{ $t("companion.detailStatus", { status: $t(`status.${detail.status}`) }) }}</span>
       <div class="status-buttons">
         <AppButton
           v-for="action in actions"
@@ -117,30 +116,37 @@ function submitReminder() {
           :variant="action.target === 'Done' ? 'primary' : 'ghost'"
           @click="emit('transition', action.target)"
         >
-          {{ action.label }}
+          {{ statusActionLabel(detail.status, action.target, t) }}
         </AppButton>
       </div>
     </div>
 
     <section class="reminders">
-      <h3>提醒</h3>
+      <h3>{{ $t("companion.reminders") }}</h3>
       <AppErrorBanner v-if="remindersError" :message="remindersError" />
       <div class="reminder-form">
         <input v-model="reminderInput" type="datetime-local" class="datetime-input" />
         <select v-model="repeatType">
           <option v-for="rt in REPEAT_TYPE_OPTIONS" :key="rt" :value="rt">
-            {{ REPEAT_TYPE_LABELS[rt] }}
+            {{ $t(`repeat.${rt}`) }}
           </option>
         </select>
-        <AppButton @click="submitReminder">添加</AppButton>
+        <AppButton @click="submitReminder">{{ $t("companion.addReminder") }}</AppButton>
       </div>
-      <div v-if="remindersLoading" class="hint">加载提醒...</div>
+      <div v-if="remindersLoading" class="hint">{{ $t("companion.loadingReminders") }}</div>
       <ul v-else class="reminder-list">
         <li v-for="item in reminders" :key="item.id" :class="{ disabled: !item.enabled }">
           <span>{{ formatDate(item.nextTriggerAt) }}</span>
-          <span>{{ REPEAT_TYPE_LABELS[item.repeatType] }}</span>
-          <span v-if="!item.enabled" class="hint">已关闭</span>
-          <button class="link" type="button" @click="emit('removeReminder', item.id)">删除</button>
+          <span>{{ $t(`repeat.${item.repeatType}`) }}</span>
+          <span v-if="!item.enabled" class="hint">{{ $t("companion.disabled") }}</span>
+          <button
+            class="link"
+            type="button"
+            :aria-label="$t('companion.deleteReminder')"
+            @click="emit('removeReminder', item.id)"
+          >
+            {{ $t("companion.deleteReminder") }}
+          </button>
         </li>
       </ul>
     </section>
@@ -151,11 +157,11 @@ function submitReminder() {
 @import "@/styles/forms.css";
 
 .detail-panel {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-border);
   padding: 12px;
   max-height: 50vh;
   overflow-y: auto;
-  background: #fff;
+  background: var(--color-surface);
 }
 
 .toolbar {
@@ -172,7 +178,7 @@ function submitReminder() {
 .status-row > span {
   display: block;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-muted);
   margin-bottom: 6px;
 }
 
@@ -185,6 +191,7 @@ function submitReminder() {
 .reminders h3 {
   margin: 0 0 8px;
   font-size: 14px;
+  color: var(--color-text);
 }
 
 .reminder-form {
@@ -198,8 +205,10 @@ function submitReminder() {
   flex: 1;
   min-width: 140px;
   padding: 6px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 
 .reminder-list {
@@ -213,7 +222,7 @@ function submitReminder() {
   gap: 8px;
   padding: 6px 0;
   font-size: 13px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .reminder-list li.disabled {
@@ -224,12 +233,12 @@ function submitReminder() {
   margin-left: auto;
   border: none;
   background: none;
-  color: #2563eb;
+  color: var(--color-accent);
   cursor: pointer;
 }
 
 .hint {
-  color: #6b7280;
+  color: var(--color-muted);
   font-size: 13px;
 }
 </style>

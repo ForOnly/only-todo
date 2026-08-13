@@ -33,20 +33,11 @@ export function serializeListDefaultSort(value: ListDefaultSort): string {
   });
 }
 
-/** 客户端合并列表（如今日视图）排序 */
-export function sortOptionsForView(view: string): { value: SortBy; label: string }[] {
-  const base = [
-    { value: "priority" as SortBy, label: "优先级" },
-    { value: "dueDate" as SortBy, label: "截止日期" },
-    { value: "updatedAt" as SortBy, label: "最近更新" },
-    { value: "createdAt" as SortBy, label: "创建时间" },
-    { value: "title" as SortBy, label: "标题" },
-  ];
+/** 客户端合并列表（如今日视图）排序键；标签由调用方 $t(`sort.${value}`) */
+export function sortKeysForView(view: string): SortBy[] {
+  const base: SortBy[] = ["priority", "dueDate", "updatedAt", "createdAt", "title"];
   if (view === "done") {
-    return [
-      { value: "completedAt", label: "完成时间" },
-      ...base.filter((o) => o.value !== "dueDate"),
-    ];
+    return ["completedAt", ...base.filter((o) => o !== "dueDate")];
   }
   return base;
 }

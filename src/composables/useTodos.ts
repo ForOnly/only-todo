@@ -49,7 +49,10 @@ export function useTodos(): UseTodosReturn {
 
   async function fetchTodos(): Promise<void> {
     const gen = ++listGen;
-    loading.value = true;
+    // 有数据时刷新不 blank 列表，避免闪烁
+    if (todos.value.length === 0) {
+      loading.value = true;
+    }
     error.value = null;
     try {
       const result = await todoApi.listWorkbenchTodos({

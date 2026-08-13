@@ -22,6 +22,8 @@ export type {
   StatusActionDto,
   TodoDto,
   TodoStatus,
+  UiLocale,
+  UiTheme,
   WorkbenchView,
 } from "./generated";
 
@@ -32,6 +34,9 @@ import type {
   Priority,
   RepeatType,
   TodoStatus,
+  UiLocale,
+  UiTheme,
+  WorkbenchView,
 } from "./generated";
 
 /** 查询/更新 DTO：前端按需传字段（serde 侧有 default） */
@@ -45,7 +50,7 @@ export type UpdateTodoDto = { id: string } & Partial<{
   tags: string[];
 }>;
 export type ListTodoQuery = Partial<{
-  status: import("./generated").TodoStatus[];
+  status: TodoStatus[];
   priority: Priority[];
   tags: string[];
   keyword: string;
@@ -59,7 +64,7 @@ export type ListTodoQuery = Partial<{
   pageSize: number;
 }>;
 export type ListWorkbenchQuery = {
-  view: import("./generated").WorkbenchView;
+  view: WorkbenchView;
   tag?: string;
   keyword?: string;
   sortBy?: string;
@@ -81,6 +86,8 @@ export type UpdateSettingsDto = Partial<{
   floatDefaultMode: HomeShape;
   floatHoverPreview: boolean;
   autostartEnabled: boolean;
+  uiTheme: UiTheme;
+  uiLocale: UiLocale;
 }>;
 export type ListEventsQuery = Partial<{
   after: string;
@@ -132,26 +139,6 @@ export interface AppError {
 export const PRIORITY_OPTIONS: Priority[] = ["Urgent", "High", "Medium", "Low"];
 export const REPEAT_TYPE_OPTIONS: RepeatType[] = ["none", "daily", "weekly"];
 export const SNOOZE_OPTIONS = [5, 15, 30, 60] as const;
-
-export const PRIORITY_LABELS: Record<Priority, string> = {
-  Urgent: "紧急",
-  High: "高",
-  Medium: "中",
-  Low: "低",
-};
-
-export const STATUS_LABELS: Record<TodoStatus, string> = {
-  Todo: "待办",
-  Doing: "进行中",
-  Done: "已完成",
-  Archived: "已归档",
-};
-
-export const REPEAT_TYPE_LABELS: Record<RepeatType, string> = {
-  none: "一次性",
-  daily: "每日",
-  weekly: "每周",
-};
 
 export const DEFAULT_CREATE_TODO_FORM = (): CreateTodoFormModel => ({
   title: "",

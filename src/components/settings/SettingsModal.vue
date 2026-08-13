@@ -3,7 +3,7 @@ import { ref, watch } from "vue";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppModal from "@/components/common/AppModal.vue";
-import type { FloatDefaultMode, SortBy, SortOrder, UpdateSettingsDto } from "@/api/types";
+import type { FloatDefaultMode, SortBy, SortOrder, UiLocale, UiTheme, UpdateSettingsDto } from "@/api/types";
 import { parseListDefaultSort, serializeListDefaultSort } from "@/utils/listSort";
 
 const props = defineProps<{
@@ -16,6 +16,8 @@ const props = defineProps<{
   floatDefaultMode: FloatDefaultMode;
   floatHoverPreview: boolean;
   autostartEnabled: boolean;
+  uiTheme: UiTheme;
+  uiLocale: UiLocale;
   /** 父组件保存失败时展示；成功时父组件关闭弹窗 */
   error?: string | null;
   saving?: boolean;
@@ -33,6 +35,8 @@ const localAutoShow = ref(props.floatAutoShow);
 const localDefaultMode = ref<FloatDefaultMode>(props.floatDefaultMode);
 const localHoverPreview = ref(props.floatHoverPreview);
 const localAutostart = ref(props.autostartEnabled);
+const localTheme = ref<UiTheme>(props.uiTheme);
+const localLocale = ref<UiLocale>(props.uiLocale);
 const localSortBy = ref<SortBy>("priority");
 const localSortOrder = ref<SortOrder>("desc");
 
@@ -47,6 +51,8 @@ watch(
       localDefaultMode.value = props.floatDefaultMode;
       localHoverPreview.value = props.floatHoverPreview;
       localAutostart.value = props.autostartEnabled;
+      localTheme.value = props.uiTheme;
+      localLocale.value = props.uiLocale;
       const sort = parseListDefaultSort(props.listDefaultSort);
       localSortBy.value = sort.sortBy;
       localSortOrder.value = sort.sortOrder;
@@ -67,69 +73,90 @@ function save() {
     floatDefaultMode: localDefaultMode.value,
     floatHoverPreview: localHoverPreview.value,
     autostartEnabled: localAutostart.value,
+    uiTheme: localTheme.value,
+    uiLocale: localLocale.value,
   });
 }
 </script>
 
 <template>
-  <AppModal :open="open" title="设置" @close="emit('close')">
+  <AppModal :open="open" :title="$t('settings.title')" @close="emit('close')">
     <section class="group">
-      <h3>通知</h3>
+      <h3>{{ $t("settings.appearance") }}</h3>
+      <label class="setting-row">
+        <span>{{ $t("settings.theme") }}</span>
+        <select v-model="localTheme" class="select-input">
+          <option value="system">{{ $t("settings.themeSystem") }}</option>
+          <option value="light">{{ $t("settings.themeLight") }}</option>
+          <option value="dark">{{ $t("settings.themeDark") }}</option>
+        </select>
+      </label>
+      <label class="setting-row">
+        <span>{{ $t("settings.language") }}</span>
+        <select v-model="localLocale" class="select-input">
+          <option value="zh-CN">{{ $t("settings.langZh") }}</option>
+          <option value="en-US">{{ $t("settings.langEn") }}</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="group">
+      <h3>{{ $t("settings.notifications") }}</h3>
       <label class="setting-row">
         <input v-model="localNotification" type="checkbox" />
-        <span>启用提醒通知</span>
+        <span>{{ $t("settings.enableNotifications") }}</span>
       </label>
     </section>
 
     <section class="group">
-      <h3>列表</h3>
+      <h3>{{ $t("settings.list") }}</h3>
       <label class="setting-row">
-        <span>默认排序</span>
+        <span>{{ $t("settings.defaultSort") }}</span>
         <select v-model="localSortBy" class="select-input">
-          <option value="priority">优先级</option>
-          <option value="dueDate">截止日期</option>
-          <option value="updatedAt">最近更新</option>
-          <option value="createdAt">创建时间</option>
-          <option value="title">标题</option>
+          <option value="priority">{{ $t("sort.priority") }}</option>
+          <option value="dueDate">{{ $t("sort.dueDate") }}</option>
+          <option value="updatedAt">{{ $t("sort.updatedAt") }}</option>
+          <option value="createdAt">{{ $t("sort.createdAt") }}</option>
+          <option value="title">{{ $t("sort.title") }}</option>
         </select>
       </label>
       <label class="setting-row">
-        <span>方向</span>
+        <span>{{ $t("settings.direction") }}</span>
         <select v-model="localSortOrder" class="select-input">
-          <option value="desc">降序</option>
-          <option value="asc">升序</option>
+          <option value="desc">{{ $t("settings.desc") }}</option>
+          <option value="asc">{{ $t("settings.asc") }}</option>
         </select>
       </label>
-      <p class="hint">打开主窗或切换视图时使用此默认排序（可在列表内临时改）。</p>
+      <p class="hint">{{ $t("settings.sortHint") }}</p>
     </section>
 
     <section class="group">
-      <h3>伴侣</h3>
+      <h3>{{ $t("settings.companion") }}</h3>
       <label class="setting-row">
         <input v-model="localAlwaysOnTop" type="checkbox" />
-        <span>伴侣始终置顶</span>
+        <span>{{ $t("settings.alwaysOnTop") }}</span>
       </label>
       <label class="setting-row">
         <input v-model="localAutoShow" type="checkbox" />
-        <span>启动时显示伴侣</span>
+        <span>{{ $t("settings.autoShow") }}</span>
       </label>
       <div class="setting-block">
         <label class="setting-row">
-          <span>默认形态</span>
+          <span>{{ $t("settings.defaultShape") }}</span>
           <select v-model="localDefaultMode" class="select-input">
-            <option value="ball">小圆球</option>
-            <option value="panel">面板</option>
+            <option value="ball">{{ $t("settings.ball") }}</option>
+            <option value="panel">{{ $t("settings.panel") }}</option>
           </select>
         </label>
-        <p class="hint">小圆球为日常气泡，− 回到圆球；面板为迷你窗，− 贴到边缘。贴边后 − 收成条。</p>
+        <p class="hint">{{ $t("settings.shapeHint") }}</p>
       </div>
       <label class="setting-row">
         <input v-model="localHoverPreview" type="checkbox" />
-        <span>贴边悬停预览</span>
+        <span>{{ $t("settings.hoverPreview") }}</span>
       </label>
-      <p class="hint">默认关。悬停约 0.4s 预览，离开约 0.3s 收起；单击预览可钉住。</p>
+      <p class="hint">{{ $t("settings.hoverHint") }}</p>
       <label class="setting-row">
-        <span>伴侣列表条数</span>
+        <span>{{ $t("settings.visibleCount") }}</span>
         <input
           v-model.number="localVisibleCount"
           type="number"
@@ -141,10 +168,10 @@ function save() {
     </section>
 
     <section class="group">
-      <h3>系统</h3>
+      <h3>{{ $t("settings.system") }}</h3>
       <label class="setting-row">
         <input v-model="localAutostart" type="checkbox" />
-        <span>开机自启</span>
+        <span>{{ $t("settings.autostart") }}</span>
       </label>
     </section>
 
@@ -152,7 +179,7 @@ function save() {
 
     <div class="app-modal-actions">
       <AppButton variant="primary" :disabled="saving" @click="save">
-        {{ saving ? "保存中…" : "保存" }}
+        {{ saving ? $t("common.saving") : $t("common.save") }}
       </AppButton>
     </div>
   </AppModal>
@@ -168,7 +195,7 @@ function save() {
 .group h3 {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-muted);
 }
 
 .setting-block {
@@ -182,33 +209,38 @@ function save() {
   font-size: 14px;
   cursor: pointer;
   padding: 4px 0;
+  color: var(--color-text);
 }
 
 .hint {
   margin: 0 0 4px;
   padding-left: 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-muted);
   line-height: 1.4;
 }
 
 .error {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 
 .number-input {
   width: 64px;
   padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 
 .select-input {
   padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 </style>

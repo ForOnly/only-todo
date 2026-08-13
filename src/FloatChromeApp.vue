@@ -2,7 +2,8 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
-import type { CompanionSession } from "@/api/types";
+import type { CompanionSession, SettingsDto } from "@/api/types";
+import { getSettings } from "@/api/settings";
 import {
   companionClickChrome,
   companionMinimize,
@@ -13,11 +14,13 @@ import FloatBall from "@/components/float/FloatBall.vue";
 import FloatDockStrip from "@/components/float/FloatDockStrip.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
 import { TAURI_EVENTS } from "@/constants/events";
+import { applyAppearance } from "@/utils/appearance";
 
 const session = ref<CompanionSession | null>(null);
 const { startDrag, onPointerUp } = useCompanionDrag("chrome");
 
 let unlistenSession: (() => void) | null = null;
+let unlistenSettings: (() => void) | null = null;
 
 function applySession(next: CompanionSession) {
   session.value = next;
@@ -67,6 +70,15 @@ onMounted(async () => {
   unlistenSession = await listen<CompanionSession>(TAURI_EVENTS.FLOAT_SESSION_CHANGED, (event) =>
     applySession(event.payload),
   );
+  unlistenSettings = await listen<SettingsDto>(TAURI_EVENTS.SETTINGS_UPDATED, (event) => {
+    applyAppearance(event.payload);
+  });
+  try {
+    const settings = await getSettings();
+    applyAppearance(settings);
+  } catch {
+    // ignore
+  }
   try {
     applySession(await getCompanionSession());
   } catch (err) {
@@ -79,6 +91,7 @@ onUnmounted(() => {
   document.removeEventListener("pointercancel", onPointerUp, true);
   window.removeEventListener("keydown", onKeydown);
   unlistenSession?.();
+  unlistenSettings?.();
 });
 </script>
 

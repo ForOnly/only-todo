@@ -52,6 +52,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 9,
         sql: include_str!("../../../migrations/009_normalize_tags.sql"),
     },
+    Migration {
+        version: 10,
+        sql: include_str!("../../../migrations/010_ui_theme_locale.sql"),
+    },
 ];
 
 impl Database {

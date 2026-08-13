@@ -9,6 +9,7 @@ mod repository;
 mod scheduler;
 mod services;
 mod state;
+mod tray_i18n;
 
 use std::sync::Mutex;
 
@@ -20,8 +21,8 @@ use commands::{
     },
     settings::{get_settings, update_settings},
     todo::{
-        create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags,
-        list_todos, list_workbench_todos, restore_todo, transition_todo, update_todo,
+        create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags, list_todos,
+        list_workbench_todos, restore_todo, transition_todo, update_todo,
     },
     window::{
         companion_click_chrome, companion_drag_ended, companion_minimize, companion_open_view,
@@ -42,6 +43,7 @@ use tauri::{
     Emitter, Manager, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tray_i18n::{read_ui_locale, tray_labels, TrayMenuItems};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -211,12 +213,27 @@ fn setup_companion_windows(app: &tauri::AppHandle) -> Result<(), Box<dyn std::er
 }
 
 fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show_float = MenuItem::with_id(app, "show_float", "显示伴侣", true, None::<&str>)?;
-    let show_main = MenuItem::with_id(app, "show_main", "打开主窗口", true, None::<&str>)?;
-    let new_todo = MenuItem::with_id(app, "new_todo", "新建任务", true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_float, &show_main, &new_todo, &settings, &quit])?;
+    let locale = read_ui_locale(app);
+    let labels = tray_labels(locale);
+
+    let items = TrayMenuItems {
+        show_float: MenuItem::with_id(app, "show_float", labels.show_float, true, None::<&str>)?,
+        show_main: MenuItem::with_id(app, "show_main", labels.show_main, true, None::<&str>)?,
+        new_todo: MenuItem::with_id(app, "new_todo", labels.new_todo, true, None::<&str>)?,
+        settings: MenuItem::with_id(app, "settings", labels.settings, true, None::<&str>)?,
+        quit: MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?,
+    };
+    let menu = Menu::with_items(
+        app,
+        &[
+            &items.show_float,
+            &items.show_main,
+            &items.new_todo,
+            &items.settings,
+            &items.quit,
+        ],
+    )?;
+    app.manage(items);
 
     let icon = app
         .default_window_icon()

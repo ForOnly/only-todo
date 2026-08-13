@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 
 import type {
@@ -7,7 +8,10 @@ import type {
   FloatDefaultMode,
   RepeatType,
   SortBy,
+  SortOrder,
   TodoDto,
+  UiLocale,
+  UiTheme,
   WorkbenchView,
 } from "@/api/types";
 import { listAllTags, listTodos, getTodo, transitionTodo } from "@/api/todos";
@@ -24,9 +28,17 @@ import TaskInspector from "@/components/workbench/TaskInspector.vue";
 import { TAURI_EVENTS } from "@/constants/events";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
+import { applyAppearance } from "@/utils/appearance";
 import { dueDateRangeForFilter, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
+import {
+  formatRelativeTime,
+  translateEntityType,
+  translateEventType,
+} from "@/utils/i18nFormat";
 import { parseListDefaultSort } from "@/utils/listSort";
+
+const { t } = useI18n();
 
 const {
   todos,
@@ -69,6 +81,7 @@ const {
   editDueDate,
   editTags,
   saving,
+  saveStatus,
   error: detailError,
   isDirty,
   scheduleAutosave,
@@ -98,14 +111,17 @@ const floatAutoShow = ref(true);
 const floatDefaultMode = ref<FloatDefaultMode>("ball");
 const floatHoverPreview = ref(false);
 const autostartEnabled = ref(false);
+const uiTheme = ref<UiTheme>("system");
+const uiLocale = ref<UiLocale>("zh-CN");
 const allTags = ref<string[]>([]);
 const overdueCount = ref(0);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
+const activityCollapsed = ref(false);
 const eventUnlisteners: (() => void)[] = [];
 
-onMounted(async () => {
+async function loadAndApplySettings() {
   try {
     const settings = await getSettings();
     notificationEnabled.value = settings.notificationEnabled;
@@ -116,12 +132,19 @@ onMounted(async () => {
     floatDefaultMode.value = settings.floatDefaultMode;
     floatHoverPreview.value = settings.floatHoverPreview;
     autostartEnabled.value = settings.autostartEnabled;
+    uiTheme.value = settings.uiTheme;
+    uiLocale.value = settings.uiLocale;
+    applyAppearance(settings);
     const sort = parseListDefaultSort(settings.listDefaultSort);
     sortBy.value = sort.sortBy;
     sortOrder.value = sort.sortOrder;
   } catch {
     // 首次启动时 settings 表可能尚未写入种子数据，忽略即可
   }
+}
+
+onMounted(async () => {
+  await loadAndApplySettings();
 
   await fetchTodos();
   await loadTags();
@@ -144,6 +167,12 @@ onMounted(async () => {
     await listen(TAURI_EVENTS.OPEN_SETTINGS, () => {
       settingsError.value = null;
       settingsOpen.value = true;
+    }),
+  );
+
+  eventUnlisteners.push(
+    await listen(TAURI_EVENTS.SETTINGS_UPDATED, () => {
+      void loadAndApplySettings();
     }),
   );
 
@@ -263,7 +292,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
 async function moveSelection(delta: number) {
   if (!todos.value.length) return;
-  const ids = todos.value.map((t) => t.id);
+  const ids = todos.value.map((item) => item.id);
   const current = selectedId.value ? ids.indexOf(selectedId.value) : -1;
   let next = current + delta;
   if (current < 0) next = delta > 0 ? 0 : ids.length - 1;
@@ -273,7 +302,7 @@ async function moveSelection(delta: number) {
 }
 
 async function navigateToTodo(id: string | null) {
-  await flushAutosave();
+  if (!(await flushAutosave())) return;
   if (!id) {
     await selectTodo(null);
     return;
@@ -287,10 +316,10 @@ async function navigateToTodo(id: string | null) {
         activeTag.value = null;
         page.value = 1;
         await fetchTodos();
-      } else if (!todos.value.some((t) => t.id === id)) {
+      } else if (!todos.value.some((item) => item.id === id)) {
         await fetchTodos();
       }
-    } else if (!todos.value.some((t) => t.id === id)) {
+    } else if (!todos.value.some((item) => item.id === id)) {
       // 当前视图可能筛掉该任务；切到「全部」再定位（与恢复后导航一致）
       if (view.value !== "all" || activeTag.value) {
         view.value = "all";
@@ -311,9 +340,10 @@ function openCreateModal(opts?: { dueToday?: boolean }) {
   createOpen.value = true;
 }
 
-async function closeDetail() {
-  await flushAutosave();
+async function closeDetail(): Promise<boolean> {
+  if (!(await flushAutosave())) return false;
   selectedId.value = null;
+  return true;
 }
 
 async function handleSelect(id: string) {
@@ -369,7 +399,7 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
     await loadTags();
     await refreshOverdueCount();
     // 今日视图创建但未带 due 时可能不在列表；稳妥切全部并选中
-    if (view.value === "today" && !todos.value.some((t) => t.id === created.id)) {
+    if (view.value === "today" && !todos.value.some((item) => item.id === created.id)) {
       view.value = "all";
       activeTag.value = null;
       page.value = 1;
@@ -422,13 +452,18 @@ async function handleSnoozeReminder(id: string, minutes: number) {
 }
 
 async function handleViewSelect(next: WorkbenchView, tag?: string | null) {
-  await flushAutosave();
+  if (!(await flushAutosave())) return;
   setView(next, tag);
   selectedId.value = null;
 }
 
 function handleChangeSort(next: SortBy) {
   setSort(next);
+}
+
+function handleToggleSortOrder() {
+  const flipped: SortOrder = sortOrder.value === "asc" ? "desc" : "asc";
+  setSort(sortBy.value, flipped);
 }
 
 function handleEmptyAction(action: "create" | "all") {
@@ -447,16 +482,7 @@ async function handleOpenCompanion() {
   }
 }
 
-async function handleSettingsUpdate(payload: {
-  notificationEnabled?: boolean;
-  listDefaultSort?: string;
-  floatAlwaysOnTop?: boolean;
-  floatVisibleCount?: number;
-  floatAutoShow?: boolean;
-  floatDefaultMode?: FloatDefaultMode;
-  floatHoverPreview?: boolean;
-  autostartEnabled?: boolean;
-}) {
+async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0]) {
   settingsSaving.value = true;
   settingsError.value = null;
   try {
@@ -469,6 +495,9 @@ async function handleSettingsUpdate(payload: {
     floatDefaultMode.value = settings.floatDefaultMode;
     floatHoverPreview.value = settings.floatHoverPreview;
     autostartEnabled.value = settings.autostartEnabled;
+    uiTheme.value = settings.uiTheme;
+    uiLocale.value = settings.uiLocale;
+    applyAppearance(settings);
     if (payload.listDefaultSort) {
       const sort = parseListDefaultSort(settings.listDefaultSort);
       setSort(sort.sortBy, sort.sortOrder);
@@ -520,6 +549,7 @@ async function handleSettingsUpdate(payload: {
         @prev-page="goToPage(page - 1)"
         @next-page="goToPage(page + 1)"
         @change-sort="handleChangeSort"
+        @toggle-sort-order="handleToggleSortOrder"
         @empty-action="handleEmptyAction"
       />
 
@@ -531,6 +561,7 @@ async function handleSettingsUpdate(payload: {
         v-model:edit-due-date="editDueDate"
         v-model:edit-tags="editTags"
         :saving="saving"
+        :save-status="saveStatus"
         :error="detailError"
         :reminders="reminders"
         :reminders-loading="remindersLoading"
@@ -550,12 +581,25 @@ async function handleSettingsUpdate(payload: {
 
     <p v-if="listError" class="global-error">{{ listError }}</p>
 
-    <aside v-if="recentEvents.length" class="activity" aria-label="最近活动">
-      <h2 class="activity-title">最近活动</h2>
-      <ul class="activity-list">
+    <aside v-if="recentEvents.length" class="activity" :aria-label="$t('activity.aria')">
+      <header class="activity-header">
+        <h2 class="activity-title">{{ $t("activity.title") }}</h2>
+        <button
+          type="button"
+          class="activity-toggle"
+          :aria-expanded="!activityCollapsed"
+          @click="activityCollapsed = !activityCollapsed"
+        >
+          {{ activityCollapsed ? $t("activity.expand") : $t("activity.collapse") }}
+        </button>
+      </header>
+      <ul v-show="!activityCollapsed" class="activity-list">
         <li v-for="ev in recentEvents" :key="ev.id" class="activity-item">
-          <span class="activity-type">{{ ev.eventType }}</span>
-          <span class="activity-meta">{{ ev.entityType }} · {{ ev.createdAt }}</span>
+          <span class="activity-type">{{ translateEventType(ev.eventType, t) }}</span>
+          <span class="activity-meta">
+            {{ translateEntityType(ev.entityType, t) }} ·
+            {{ formatRelativeTime(ev.createdAt, t) }}
+          </span>
         </li>
       </ul>
     </aside>
@@ -581,6 +625,8 @@ async function handleSettingsUpdate(payload: {
       :float-default-mode="floatDefaultMode"
       :float-hover-preview="floatHoverPreview"
       :autostart-enabled="autostartEnabled"
+      :ui-theme="uiTheme"
+      :ui-locale="uiLocale"
       :error="settingsError"
       :saving="settingsSaving"
       @close="settingsOpen = false"
@@ -590,21 +636,8 @@ async function handleSettingsUpdate(payload: {
 </template>
 
 <style>
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
 #app {
-  margin: 0;
   height: 100%;
-}
-
-body {
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  color: #0f172a;
-  background: #eef2f7;
 }
 </style>
 
@@ -614,8 +647,8 @@ body {
   flex-direction: column;
   height: 100vh;
   background:
-    radial-gradient(1200px 400px at 10% -10%, rgba(15, 23, 42, 0.06), transparent 60%),
-    #eef2f7;
+    radial-gradient(1200px 400px at 10% -10%, var(--color-accent-soft), transparent 60%),
+    var(--color-bg);
 }
 
 .body {
@@ -623,31 +656,54 @@ body {
   flex: 1;
   min-height: 0;
   margin: 0;
-  background: #fff;
-  border-top: 1px solid #e2e8f0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
 }
 
 .global-error {
   margin: 0;
   padding: 8px 16px;
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 
 .activity {
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
   padding: 8px 16px 12px;
   max-height: 120px;
   overflow: auto;
 }
 
+.activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .activity-title {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--color-muted);
   letter-spacing: 0.02em;
+}
+
+.activity-toggle {
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color var(--transition-fast);
+}
+
+.activity-toggle:hover {
+  color: var(--color-accent-hover);
 }
 
 .activity-list {
@@ -663,12 +719,12 @@ body {
   display: flex;
   gap: 12px;
   font-size: 12px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .activity-type {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text);
   min-width: 140px;
 }
 

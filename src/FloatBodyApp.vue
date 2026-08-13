@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 
 import * as todoApi from "@/api/todos";
@@ -19,7 +20,10 @@ import FloatTaskList from "@/components/float/FloatTaskList.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { TAURI_EVENTS } from "@/constants/events";
+import { applyAppearance } from "@/utils/appearance";
 import { formatErrorMessage } from "@/utils/error";
+
+const { t } = useI18n();
 
 const todos = ref<TodoDto[]>([]);
 const session = ref<CompanionSession | null>(null);
@@ -52,10 +56,10 @@ const showMinus = computed(() => {
 });
 const minusTitle = computed(() => {
   const current = session.value;
-  if (!current) return "贴到边缘";
-  if (current.placement === "docked") return "收成条";
-  if (current.homeShape === "ball") return "回到圆球";
-  return "贴到边缘";
+  if (!current) return t("companion.dockToEdge");
+  if (current.placement === "docked") return t("companion.collapseToStrip");
+  if (current.homeShape === "ball") return t("companion.backToBall");
+  return t("companion.dockToEdge");
 });
 const isPreview = computed(() => session.value?.panelMode === "preview");
 
@@ -67,6 +71,8 @@ const {
   editDueDate,
   saving,
   error: detailError,
+  isDirty,
+  flushAutosave,
   save,
   reload,
   transitionTo,
@@ -128,8 +134,23 @@ async function fetchTodos(): Promise<void> {
   }
 }
 
-function selectTodo(id: string) {
-  selectedId.value = selectedId.value === id ? null : id;
+async function closeDetail(): Promise<boolean> {
+  if (isDirty()) {
+    if (!(await flushAutosave())) return false;
+  }
+  selectedId.value = null;
+  return true;
+}
+
+async function selectTodo(id: string) {
+  if (selectedId.value === id) {
+    await closeDetail();
+    return;
+  }
+  if (selectedId.value && isDirty()) {
+    if (!(await flushAutosave())) return;
+  }
+  selectedId.value = id;
 }
 
 async function openMainWithTodo(id: string) {
@@ -155,7 +176,7 @@ async function submitQuickAdd() {
   const title = quickTitle.value.trim();
   if (!title || creating.value) return;
   if (title.length > TITLE_MAX_LENGTH) {
-    error.value = `标题不能超过 ${TITLE_MAX_LENGTH} 个字符`;
+    error.value = t("validation.titleTooLong", { n: TITLE_MAX_LENGTH });
     return;
   }
   creating.value = true;
@@ -179,7 +200,7 @@ async function submitQuickAdd() {
 }
 
 async function minimize() {
-  selectedId.value = null;
+  if (!(await closeDetail())) return;
   try {
     applySession(await companionMinimize());
   } catch (err) {
@@ -189,7 +210,7 @@ async function minimize() {
 }
 
 async function hideCompanion() {
-  selectedId.value = null;
+  if (!(await closeDetail())) return;
   try {
     await hideFloatingWindow();
   } catch (err) {
@@ -324,7 +345,7 @@ async function onPreviewClick(event: MouseEvent) {
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
   if (selectedId.value) {
-    selectedId.value = null;
+    void closeDetail();
     return;
   }
   const current = session.value;
@@ -335,7 +356,15 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 watch(panelVisible, async (visible) => {
-  if (visible) await fetchTodos();
+  if (visible) {
+    await fetchTodos();
+    return;
+  }
+  // Chrome Esc/收条等不经 Body minimize：收起时 flush，失败则保留选中
+  if (selectedId.value && isDirty()) {
+    if (!(await flushAutosave())) return;
+  }
+  selectedId.value = null;
 });
 
 watch(shouldFocusQuickAdd, async (focus) => {
@@ -353,6 +382,7 @@ onMounted(async () => {
   });
   unlistenSettings = await listen<SettingsDto>(TAURI_EVENTS.SETTINGS_UPDATED, (event) => {
     visibleCount.value = event.payload.floatVisibleCount;
+    applyAppearance(event.payload);
     if (panelVisible.value) {
       void fetchTodos();
     }
@@ -368,7 +398,10 @@ onMounted(async () => {
         } catch {
           // ignore
         }
-        if (selectedId.value && !saving.value) {
+        if (!selectedId.value || saving.value) return;
+        if (isDirty()) {
+          await flushAutosave();
+        } else {
           await reload();
           await fetchReminders(selectedId.value);
         }
@@ -378,6 +411,7 @@ onMounted(async () => {
   try {
     const settings = await getSettings();
     visibleCount.value = settings.floatVisibleCount;
+    applyAppearance(settings);
   } catch {
     // ignore
   }
@@ -412,7 +446,7 @@ onUnmounted(() => {
     @focusout="onFocusOut"
     @click="onPreviewClick"
   >
-    <p v-if="isPreview" class="preview-hint">预览 · 点击钉住</p>
+    <p v-if="isPreview" class="preview-hint">{{ $t("companion.previewHint") }}</p>
     <header
       class="float-header"
       @pointerdown="onHeaderPointerDown"
@@ -420,18 +454,25 @@ onUnmounted(() => {
       @pointerup="onHeaderPointerUp"
       @pointercancel="onHeaderPointerUp"
     >
-      <span class="title">Only Todo</span>
-      <span class="count">{{ activeCount }} 待办</span>
+      <span class="title">{{ $t("common.brand") }}</span>
+      <span class="count">{{ $t("companion.activeCount", { n: activeCount }) }}</span>
       <button
         v-if="showMinus"
         type="button"
         class="icon-btn"
         :title="minusTitle"
+        :aria-label="minusTitle"
         @click.stop="minimize"
       >
         −
       </button>
-      <button type="button" class="icon-btn" title="隐藏到托盘" @click.stop="hideCompanion">
+      <button
+        type="button"
+        class="icon-btn"
+        :title="$t('companion.hideToTray')"
+        :aria-label="$t('companion.hideToTray')"
+        @click.stop="hideCompanion"
+      >
         ×
       </button>
     </header>
@@ -442,12 +483,14 @@ onUnmounted(() => {
         v-model="quickTitle"
         type="text"
         maxlength="200"
-        placeholder="添加任务，Enter 保存"
+        :placeholder="$t('companion.quickAddPlaceholder')"
         :disabled="creating"
       />
     </form>
 
     <p v-if="error" class="error">{{ error }}</p>
+
+    <p v-if="!selectedId" class="edit-hint">{{ $t("companion.editHint") }}</p>
 
     <FloatTaskList
       :todos="todos"
@@ -470,7 +513,7 @@ onUnmounted(() => {
       :reminders="reminders"
       :reminders-loading="remindersLoading"
       :reminders-error="remindersError ?? reminderError"
-      @close="selectedId = null"
+      @close="closeDetail"
       @save="handleSave"
       @transition="transitionTo"
       @add-reminder="handleAddReminder"
@@ -495,30 +538,30 @@ body,
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
-  color: #111827;
-  font-family: system-ui, sans-serif;
+  color: var(--color-text);
+  font-family: var(--font-ui);
 }
 
 .preview-hint {
   margin: 0;
   padding: 4px 12px;
   font-size: 11px;
-  color: #1d4ed8;
-  background: #eff6ff;
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
   text-align: center;
 }
 
 .edge-right {
-  border-radius: 8px 0 0 8px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 
 .edge-left {
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .float-header {
@@ -526,8 +569,8 @@ body,
   align-items: center;
   gap: 6px;
   padding: 10px 12px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -541,43 +584,55 @@ body,
 .count {
   flex: 1;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--color-muted);
 }
 
 .icon-btn {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 6px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
+  transition: background var(--transition-fast);
 }
 
 .icon-btn:hover {
-  background: #f3f4f6;
+  background: var(--color-bg-accent);
 }
 
 .quick-add {
   padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .quick-add input {
   width: 100%;
   box-sizing: border-box;
   padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.edit-hint {
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--color-muted);
+  text-align: center;
 }
 
 .error {
   margin: 0;
   padding: 8px 12px;
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
   font-size: 13px;
 }
 </style>

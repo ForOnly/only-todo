@@ -9,8 +9,12 @@ import * as todoApi from "@/api/todos";
 import type { ReminderDto, RepeatType, TodoDto, TodoStatus, UpdateTodoDto } from "@/api/types";
 import { fromLocalDatetimeInput, toLocalDatetimeInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
+import { i18n } from "@/i18n";
 
 const AUTOSAVE_MS = 450;
+const SAVED_CLEAR_MS = 1500;
+
+export type SaveStatus = "idle" | "dirty" | "saving" | "saved";
 
 export interface UseRemindersReturn {
   reminders: Ref<ReminderDto[]>;
@@ -31,6 +35,7 @@ export interface UseTodoDetailReturn {
   editDueDate: Ref<string>;
   editTags: Ref<string[]>;
   saving: Ref<boolean>;
+  saveStatus: Ref<SaveStatus>;
   error: Ref<string | null>;
   isDirty: () => boolean;
   save: () => Promise<boolean>;
@@ -129,10 +134,42 @@ export function useTodoDetail(
   const editDueDate = ref("");
   const editTags = ref<string[]>([]);
   const saving = ref(false);
+  const saveStatus = ref<SaveStatus>("idle");
   const error = ref<string | null>(null);
   let loadGen = 0;
   let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+  let savedClearTimer: ReturnType<typeof setTimeout> | null = null;
   let suppressAutosave = false;
+  let savePromise: Promise<boolean> | null = null;
+
+  function clearSavedTimer(): void {
+    if (savedClearTimer) {
+      clearTimeout(savedClearTimer);
+      savedClearTimer = null;
+    }
+  }
+
+  function syncSaveStatus(): void {
+    if (saving.value) {
+      saveStatus.value = "saving";
+    } else if (isDirty()) {
+      // dirty 优先于 saved，避免「已保存」窗口内再编辑仍显示已保存
+      saveStatus.value = "dirty";
+    } else if (saveStatus.value === "saved") {
+      // 保持 saved 直到定时器清除
+    } else {
+      saveStatus.value = "idle";
+    }
+  }
+
+  function markSaved(): void {
+    saveStatus.value = "saved";
+    clearSavedTimer();
+    savedClearTimer = setTimeout(() => {
+      savedClearTimer = null;
+      syncSaveStatus();
+    }, SAVED_CLEAR_MS);
+  }
 
   function applyDetailToForm(todo: TodoDto): void {
     detail.value = todo;
@@ -141,6 +178,8 @@ export function useTodoDetail(
     editPriority.value = todo.priority;
     editDueDate.value = toLocalDatetimeInput(todo.dueDate);
     editTags.value = [...todo.tags];
+    saveStatus.value = "idle";
+    clearSavedTimer();
   }
 
   async function loadDetail(id: string): Promise<void> {
@@ -155,6 +194,7 @@ export function useTodoDetail(
       if (gen !== loadGen) return;
       error.value = formatErrorMessage(err);
       detail.value = null;
+      saveStatus.value = "idle";
     } finally {
       suppressAutosave = false;
     }
@@ -165,12 +205,19 @@ export function useTodoDetail(
       clearTimeout(autosaveTimer);
       autosaveTimer = null;
     }
+    clearSavedTimer();
     if (!id) {
       loadGen += 1;
       detail.value = null;
+      saveStatus.value = "idle";
       return;
     }
     await loadDetail(id);
+  });
+
+  watch([editTitle, editDescription, editPriority, editDueDate, editTags], () => {
+    if (suppressAutosave || !selectedId.value || detail.value?.deletedAt) return;
+    syncSaveStatus();
   });
 
   async function reload(): Promise<void> {
@@ -191,6 +238,8 @@ export function useTodoDetail(
   }
 
   async function save(): Promise<boolean> {
+    if (savePromise) return savePromise;
+
     if (!selectedId.value || !detail.value) return false;
     if (detail.value.deletedAt) return false;
     if (!isDirty()) return true;
@@ -205,38 +254,71 @@ export function useTodoDetail(
     };
 
     if (!snap.title) {
-      error.value = "标题不能为空";
+      error.value = i18n.global.t("validation.titleRequired");
       return false;
     }
 
-    saving.value = true;
-    error.value = null;
-    try {
-      const dto: UpdateTodoDto = {
-        id: snap.id,
-        title: snap.title,
-        description: snap.description,
-        priority: snap.priority,
-        dueDate: snap.dueDate,
-        tags: snap.tags,
-      };
-      const updated = await todoApi.updateTodo(dto);
-      if (selectedId.value !== snap.id) return false;
-      applyDetailToForm(updated);
-      await onUpdated();
-      return true;
-    } catch (err) {
-      if (selectedId.value === snap.id) {
-        error.value = formatErrorMessage(err);
+    savePromise = (async () => {
+      saving.value = true;
+      saveStatus.value = "saving";
+      error.value = null;
+      try {
+        const dto: UpdateTodoDto = {
+          id: snap.id,
+          title: snap.title,
+          description: snap.description,
+          priority: snap.priority,
+          dueDate: snap.dueDate,
+          tags: snap.tags,
+        };
+        const updated = await todoApi.updateTodo(dto);
+        if (selectedId.value !== snap.id) return false;
+        // 保存期间用户可能又改了字段：仅当仍干净时套用服务端结果
+        if (!isDirty() || formMatchesSnap(snap)) {
+          applyDetailToForm(updated);
+          markSaved();
+        } else {
+          detail.value = updated;
+          syncSaveStatus();
+        }
+        await onUpdated();
+        return true;
+      } catch (err) {
+        if (selectedId.value === snap.id) {
+          error.value = formatErrorMessage(err);
+          syncSaveStatus();
+        }
+        return false;
+      } finally {
+        saving.value = false;
+        savePromise = null;
+        if (saveStatus.value === "saving") {
+          syncSaveStatus();
+        }
       }
-      return false;
-    } finally {
-      saving.value = false;
-    }
+    })();
+
+    return savePromise;
+  }
+
+  function formMatchesSnap(snap: {
+    title: string;
+    description: string;
+    priority: TodoDto["priority"];
+    dueDate: string | null;
+    tags: string[];
+  }): boolean {
+    if (editTitle.value.trim() !== snap.title) return false;
+    if (editDescription.value !== snap.description) return false;
+    if (editPriority.value !== snap.priority) return false;
+    if (fromLocalDatetimeInput(editDueDate.value) !== snap.dueDate) return false;
+    if (JSON.stringify(editTags.value) !== JSON.stringify(snap.tags)) return false;
+    return true;
   }
 
   function scheduleAutosave(): void {
     if (suppressAutosave || !selectedId.value || detail.value?.deletedAt) return;
+    syncSaveStatus();
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
       autosaveTimer = null;
@@ -269,7 +351,7 @@ export function useTodoDetail(
 
   async function remove(): Promise<boolean> {
     if (!selectedId.value) return false;
-    if (!window.confirm("确定删除此任务？可在回收站恢复。")) return false;
+    if (!window.confirm(i18n.global.t("inspector.confirmDelete"))) return false;
     const todoId = selectedId.value;
     try {
       await todoApi.deleteTodo(todoId);
@@ -305,6 +387,7 @@ export function useTodoDetail(
     editDueDate,
     editTags,
     saving,
+    saveStatus,
     error,
     isDirty,
     save,

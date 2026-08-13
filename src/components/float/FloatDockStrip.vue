@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import type { DockEdge } from "@/api/types";
 
@@ -15,6 +16,8 @@ const emit = defineEmits<{
   enter: [];
   leave: [];
 }>();
+
+const { t } = useI18n();
 
 const DRAG_THRESHOLD = 10;
 
@@ -35,9 +38,11 @@ const badge = computed(() => {
 });
 
 const tooltip = computed(() => {
-  const parts = [`${props.activeCount} 待办`];
-  if (props.overdueCount > 0) parts.push(`${props.overdueCount} 逾期`);
-  return `${parts.join(" · ")} · 单击打开，拖到边缘可贴边`;
+  const overdue =
+    props.overdueCount > 0
+      ? t("companion.ballOverdue", { n: props.overdueCount })
+      : "";
+  return t("companion.ballTitle", { active: props.activeCount, overdue });
 });
 
 function onPointerDown(event: PointerEvent) {
@@ -96,6 +101,9 @@ function onPointerCancel(event: PointerEvent) {
     class="dock-strip"
     :class="[`edge-${edge}`, urgencyClass]"
     :title="tooltip"
+    role="button"
+    tabindex="0"
+    :aria-label="tooltip"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -133,7 +141,7 @@ function onPointerCancel(event: PointerEvent) {
   width: 16px;
   height: 48px;
   flex: 0 0 16px;
-  background: #2563eb;
+  background: var(--color-accent);
   position: relative;
   display: flex;
   align-items: center;
@@ -141,19 +149,19 @@ function onPointerCancel(event: PointerEvent) {
 }
 
 .edge-left .dock-strip-bar {
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .edge-right .dock-strip-bar {
-  border-radius: 8px 0 0 8px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 
 .urgency-active .dock-strip-bar {
-  background: #2563eb;
+  background: var(--color-accent);
 }
 
 .urgency-overdue .dock-strip-bar {
-  background: #dc2626;
+  background: var(--color-priority-urgent);
 }
 
 .count {
@@ -162,13 +170,13 @@ function onPointerCancel(event: PointerEvent) {
   height: 18px;
   padding: 0 4px;
   border-radius: 9px;
-  background: #111827;
-  color: #fff;
+  background: var(--color-text);
+  color: var(--color-surface);
   font-size: 11px;
   font-weight: 700;
   line-height: 18px;
   text-align: center;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-ui);
 }
 
 .edge-left .count {

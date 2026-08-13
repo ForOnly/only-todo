@@ -127,6 +127,63 @@ pub enum CompanionSurface {
     Body,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum UiTheme {
+    System,
+    Light,
+    Dark,
+}
+
+impl UiTheme {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "light" => Self::Light,
+            "dark" => Self::Dark,
+            _ => Self::System,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum UiLocale {
+    #[serde(rename = "zh-CN")]
+    #[ts(rename = "zh-CN")]
+    ZhCN,
+    #[serde(rename = "en-US")]
+    #[ts(rename = "en-US")]
+    EnUS,
+}
+
+impl UiLocale {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ZhCN => "zh-CN",
+            Self::EnUS => "en-US",
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "en-US" | "en" => Self::EnUS,
+            _ => Self::ZhCN,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, rename_all = "camelCase")]
@@ -140,6 +197,8 @@ pub struct SettingsDto {
     pub float_default_mode: HomeShape,
     pub float_hover_preview: bool,
     pub autostart_enabled: bool,
+    pub ui_theme: UiTheme,
+    pub ui_locale: UiLocale,
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -162,6 +221,10 @@ pub struct UpdateSettingsDto {
     pub float_hover_preview: Option<bool>,
     #[serde(default)]
     pub autostart_enabled: Option<bool>,
+    #[serde(default)]
+    pub ui_theme: Option<UiTheme>,
+    #[serde(default)]
+    pub ui_locale: Option<UiLocale>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,6 +316,8 @@ pub fn export_all_ts(out_dir: &std::path::Path) {
     crate::domain::status::StatusActionDto::export_all().expect("export StatusActionDto");
     SettingsDto::export_all().expect("export SettingsDto");
     UpdateSettingsDto::export_all().expect("export UpdateSettingsDto");
+    UiTheme::export_all().expect("export UiTheme");
+    UiLocale::export_all().expect("export UiLocale");
     CompanionSession::export_all().expect("export CompanionSession");
     CompanionDragEndResult::export_all().expect("export CompanionDragEndResult");
     CompanionSurface::export_all().expect("export CompanionSurface");
@@ -283,6 +348,8 @@ export type { RepeatType } from "./RepeatType";
 export type { StatusActionDto } from "./StatusActionDto";
 export type { SettingsDto } from "./SettingsDto";
 export type { UpdateSettingsDto } from "./UpdateSettingsDto";
+export type { UiTheme } from "./UiTheme";
+export type { UiLocale } from "./UiLocale";
 export type { CompanionSession } from "./CompanionSession";
 export type { CompanionDragEndResult } from "./CompanionDragEndResult";
 export type { HomeShape } from "./HomeShape";

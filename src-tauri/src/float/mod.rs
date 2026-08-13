@@ -33,8 +33,10 @@ pub fn update_tray_tooltip(app: &tauri::AppHandle) {
     let overdue = TodoService::count_due_urgency(&state.db)
         .map(|(overdue, _)| overdue)
         .unwrap_or(0);
+    let locale = crate::tray_i18n::read_ui_locale(app);
+    let overdue_word = crate::tray_i18n::overdue_word(locale);
     let tooltip = if overdue > 0 {
-        format!("Only Todo ({count}) · {overdue} 逾期")
+        format!("Only Todo ({count}) · {overdue} {overdue_word}")
     } else {
         format!("Only Todo ({count})")
     };

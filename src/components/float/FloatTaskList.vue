@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { PRIORITY_LABELS, STATUS_LABELS, type TodoDto } from "@/api/types";
+import { computed } from "vue";
+
+import type { TodoDto } from "@/api/types";
 import { formatDueDate, isOverdue } from "@/utils/date";
 
-defineProps<{
+const props = defineProps<{
   todos: TodoDto[];
   selectedId: string | null;
   loading: boolean;
@@ -13,12 +15,15 @@ const emit = defineEmits<{
   openMain: [id: string];
   complete: [id: string];
 }>();
+
+const showLoadingHint = computed(() => props.loading && props.todos.length === 0);
+const isRefreshing = computed(() => props.loading && props.todos.length > 0);
 </script>
 
 <template>
   <div class="task-list">
-    <div v-if="loading" class="hint">加载中...</div>
-    <ul v-else>
+    <div v-if="showLoadingHint" class="hint">{{ $t("common.loading") }}</div>
+    <ul v-else :class="{ refreshing: isRefreshing }">
       <li
         v-for="todo in todos"
         :key="todo.id"
@@ -29,14 +34,15 @@ const emit = defineEmits<{
         <button
           type="button"
           class="check"
-          title="标记完成"
+          :title="$t('companion.markComplete')"
+          :aria-label="$t('companion.markComplete')"
           @click.stop="emit('complete', todo.id)"
         />
         <span class="priority" :data-level="todo.priority" />
         <div class="content">
           <span class="name">{{ todo.title }}</span>
           <span class="meta">
-            {{ STATUS_LABELS[todo.status] }} · {{ PRIORITY_LABELS[todo.priority] }}
+            {{ $t(`status.${todo.status}`) }} · {{ $t(`priority.${todo.priority}`) }}
             <template v-if="todo.dueDate">
               ·
               <span :class="{ 'due-overdue': isOverdue(todo.dueDate, todo.status) }">
@@ -46,7 +52,7 @@ const emit = defineEmits<{
           </span>
         </div>
       </li>
-      <li v-if="todos.length === 0" class="hint">暂无待办，在上方输入添加</li>
+      <li v-if="todos.length === 0" class="hint">{{ $t("companion.emptyList") }}</li>
     </ul>
   </div>
 </template>
@@ -61,6 +67,11 @@ ul {
   list-style: none;
   margin: 0;
   padding: 0;
+  transition: opacity var(--transition-fast);
+}
+
+ul.refreshing {
+  opacity: 0.72;
 }
 
 li {
@@ -68,13 +79,14 @@ li {
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border);
   cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
 li:hover,
 li.selected {
-  background: #f3f4f6;
+  background: var(--color-accent-soft);
 }
 
 .check {
@@ -82,16 +94,19 @@ li.selected {
   height: 16px;
   margin-top: 8px;
   flex-shrink: 0;
-  border: 1.5px solid #9ca3af;
+  border: 1.5px solid var(--color-muted);
   border-radius: 4px;
-  background: #fff;
+  background: var(--color-surface);
   cursor: pointer;
   padding: 0;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .check:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .priority {
@@ -99,19 +114,19 @@ li.selected {
   height: 32px;
   border-radius: 2px;
   flex-shrink: 0;
-  background: #9ca3af;
+  background: var(--color-priority-low);
 }
 
 .priority[data-level="Urgent"] {
-  background: #dc2626;
+  background: var(--color-priority-urgent);
 }
 
 .priority[data-level="High"] {
-  background: #f97316;
+  background: var(--color-priority-high);
 }
 
 .priority[data-level="Medium"] {
-  background: #3b82f6;
+  background: var(--color-priority-medium);
 }
 
 .content {
@@ -124,23 +139,24 @@ li.selected {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--color-text);
 }
 
 .meta {
   display: block;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--color-muted);
   margin-top: 2px;
 }
 
 .due-overdue,
 li.overdue .name {
-  color: #dc2626;
+  color: var(--color-overdue);
 }
 
 .hint {
   padding: 16px 12px;
-  color: #6b7280;
+  color: var(--color-muted);
   font-size: 13px;
 }
 </style>

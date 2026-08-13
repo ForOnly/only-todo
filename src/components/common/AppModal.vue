@@ -32,10 +32,21 @@ onUnmounted(() => {
 <template>
   <Teleport to="body" :disabled="teleport === false">
     <div v-if="open" class="modal-backdrop" @click.self="emit('close')">
-      <div class="modal" :class="{ compact }" role="dialog" :aria-label="title">
+      <div
+        class="modal"
+        :class="{ compact }"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="title"
+      >
         <header class="modal-header">
           <h2>{{ title }}</h2>
-          <button class="close-btn" type="button" aria-label="关闭" @click="emit('close')">
+          <button
+            class="close-btn"
+            type="button"
+            :aria-label="$t('common.close')"
+            @click="emit('close')"
+          >
             ×
           </button>
         </header>
@@ -51,7 +62,7 @@ onUnmounted(() => {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--color-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -60,14 +71,14 @@ onUnmounted(() => {
 }
 
 .modal {
-  background: #fff;
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   min-width: 400px;
   max-width: 90vw;
-  box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
+  color: var(--color-text);
 }
 
 .modal.compact {
@@ -90,13 +101,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  color: var(--color-text);
 }
 
 .close-btn {
@@ -104,13 +116,14 @@ onUnmounted(() => {
   background: none;
   font-size: 24px;
   line-height: 1;
-  color: #6b7280;
+  color: var(--color-muted);
   cursor: pointer;
   padding: 0 4px;
+  transition: color var(--transition-fast);
 }
 
 .close-btn:hover {
-  color: #111827;
+  color: var(--color-text);
 }
 
 .modal-body {

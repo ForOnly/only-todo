@@ -18,6 +18,8 @@ export type { RepeatType } from "./RepeatType";
 export type { StatusActionDto } from "./StatusActionDto";
 export type { SettingsDto } from "./SettingsDto";
 export type { UpdateSettingsDto } from "./UpdateSettingsDto";
+export type { UiTheme } from "./UiTheme";
+export type { UiLocale } from "./UiLocale";
 export type { CompanionSession } from "./CompanionSession";
 export type { CompanionDragEndResult } from "./CompanionDragEndResult";
 export type { HomeShape } from "./HomeShape";

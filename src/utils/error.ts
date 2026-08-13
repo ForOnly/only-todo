@@ -1,4 +1,5 @@
 import type { AppError } from "@/api/types";
+import { i18n } from "@/i18n";
 
 /** 将 Tauri invoke 错误解析为结构化 AppError（若可能） */
 export function parseAppError(error: unknown): AppError | null {
@@ -24,10 +25,21 @@ export function parseAppError(error: unknown): AppError | null {
   return null;
 }
 
-/** 提取供 UI 展示的人类可读错误信息 */
+const KNOWN_CODES = new Set([
+  "NOT_FOUND",
+  "VALIDATION_ERROR",
+  "INVALID_TRANSITION",
+  "DB_ERROR",
+  "INTERNAL_ERROR",
+]);
+
+/** 提取供 UI 展示的人类可读错误信息（常见 code 走 i18n） */
 export function formatErrorMessage(error: unknown): string {
   const parsed = parseAppError(error);
   if (parsed) {
+    if (KNOWN_CODES.has(parsed.code)) {
+      return i18n.global.t(`errors.${parsed.code}` as "errors.NOT_FOUND");
+    }
     return parsed.message;
   }
   return String(error);
