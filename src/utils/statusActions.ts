@@ -1,33 +1,32 @@
-/** 状态机合法边 → Inspector 动词按钮 */
-import type { TodoStatus } from "@/api/types";
+/** 状态机合法边 — 权威定义在 Rust domain/status.rs，经 get_allowed_transitions 下发 */
+import { ref, watch, type Ref } from "vue";
 
-export interface StatusAction {
-  label: string;
-  target: TodoStatus;
-}
+import { getAllowedTransitions } from "@/api/todos";
+import type { StatusActionDto, TodoStatus } from "@/api/types";
 
-export function statusActionsFor(status: TodoStatus): StatusAction[] {
-  switch (status) {
-    case "Todo":
-      return [
-        { label: "开始", target: "Doing" },
-        { label: "完成", target: "Done" },
-        { label: "归档", target: "Archived" },
-      ];
-    case "Doing":
-      return [
-        { label: "回待办", target: "Todo" },
-        { label: "完成", target: "Done" },
-        { label: "归档", target: "Archived" },
-      ];
-    case "Done":
-      return [
-        { label: "重开", target: "Todo" },
-        { label: "归档", target: "Archived" },
-      ];
-    case "Archived":
-      return [{ label: "重开", target: "Todo" }];
-    default:
-      return [];
-  }
+export type StatusAction = StatusActionDto;
+
+/** 供 Inspector / 伴侣详情：随 status 拉取后端动词列表 */
+export function useStatusActions(status: Ref<TodoStatus | null | undefined>): {
+  actions: Ref<StatusActionDto[]>;
+} {
+  const actions = ref<StatusActionDto[]>([]);
+
+  watch(
+    status,
+    async (value) => {
+      if (!value) {
+        actions.value = [];
+        return;
+      }
+      try {
+        actions.value = await getAllowedTransitions(value);
+      } catch {
+        actions.value = [];
+      }
+    },
+    { immediate: true },
+  );
+
+  return { actions };
 }

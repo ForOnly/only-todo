@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use super::priority::Priority;
 use super::status::TodoStatus;
@@ -20,8 +21,9 @@ pub struct Todo {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct TodoDto {
     pub id: String,
     pub title: String,
@@ -54,8 +56,9 @@ impl From<Todo> for TodoDto {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct CreateTodoDto {
     pub title: String,
     #[serde(default)]
@@ -68,8 +71,9 @@ pub struct CreateTodoDto {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct UpdateTodoDto {
     pub id: String,
     #[serde(default)]
@@ -78,14 +82,52 @@ pub struct UpdateTodoDto {
     pub description: Option<String>,
     #[serde(default)]
     pub priority: Option<Priority>,
+    /// dueDate：缺省=不更新；null/空串=清空；字符串=设值（serde 侧处理）
     #[serde(default, deserialize_with = "deserialize_clearable_due_date")]
+    #[ts(type = "string | null | undefined")]
     pub due_date: Option<Option<String>>,
     #[serde(default)]
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum WorkbenchView {
+    Today,
+    Overdue,
+    Doing,
+    All,
+    Done,
+    Archived,
+    Trash,
+    Tag,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct ListWorkbenchQuery {
+    pub view: WorkbenchView,
+    #[serde(default)]
+    pub tag: Option<String>,
+    #[serde(default)]
+    pub keyword: Option<String>,
+    #[serde(default = "default_sort_by")]
+    pub sort_by: String,
+    #[serde(default = "default_sort_order")]
+    pub sort_order: String,
+    #[serde(default = "default_page")]
+    #[ts(type = "number")]
+    pub page: u32,
+    #[serde(default = "default_page_size")]
+    #[ts(type = "number")]
+    pub page_size: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct ListTodoQuery {
     #[serde(default)]
     pub status: Option<Vec<TodoStatus>>,
@@ -109,8 +151,10 @@ pub struct ListTodoQuery {
     #[serde(default = "default_sort_order")]
     pub sort_order: String,
     #[serde(default = "default_page")]
+    #[ts(type = "number")]
     pub page: u32,
     #[serde(default = "default_page_size")]
+    #[ts(type = "number")]
     pub page_size: u32,
 }
 
@@ -130,6 +174,19 @@ fn default_page_size() -> u32 {
     50
 }
 
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct PaginatedTodos {
+    pub items: Vec<TodoDto>,
+    #[ts(type = "number")]
+    pub total: u64,
+    #[ts(type = "number")]
+    pub page: u32,
+    #[ts(type = "number")]
+    pub page_size: u32,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginatedResponse<T> {
@@ -137,6 +194,17 @@ pub struct PaginatedResponse<T> {
     pub total: u64,
     pub page: u32,
     pub page_size: u32,
+}
+
+impl From<PaginatedResponse<TodoDto>> for PaginatedTodos {
+    fn from(value: PaginatedResponse<TodoDto>) -> Self {
+        Self {
+            items: value.items,
+            total: value.total,
+            page: value.page,
+            page_size: value.page_size,
+        }
+    }
 }
 
 /// dueDate：缺省=不更新；null/空串=清空；字符串=设值

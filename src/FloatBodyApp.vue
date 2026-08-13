@@ -68,6 +68,7 @@ const {
   saving,
   error: detailError,
   save,
+  reload,
   transitionTo,
 } = useTodoDetail(selectedId, fetchTodos);
 
@@ -75,12 +76,15 @@ const {
   reminders,
   loading: remindersLoading,
   error: remindersError,
+  fetchReminders,
   addReminder,
   removeReminder,
 } = useReminders(selectedId);
 
 let unlistenSession: (() => void) | null = null;
 let unlistenSettings: (() => void) | null = null;
+let unlistenTodosChanged: (() => void) | null = null;
+let todosChangedTimer: ReturnType<typeof setTimeout> | null = null;
 
 function applySession(next: CompanionSession) {
   session.value = next;
@@ -194,15 +198,26 @@ async function hideCompanion() {
 }
 
 async function handleSave() {
-  await save();
-  selectedId.value = null;
+  if (await save()) {
+    selectedId.value = null;
+  }
 }
 
 async function handleAddReminder(datetime: string, repeatType?: RepeatType) {
   if (!selectedId.value) return;
   reminderError.value = null;
   try {
-    await addReminder(datetime, selectedId.value, repeatType);
+    await addReminder(selectedId.value, datetime, repeatType);
+  } catch (err) {
+    reminderError.value = formatErrorMessage(err);
+  }
+}
+
+async function handleRemoveReminder(id: string) {
+  if (!selectedId.value) return;
+  reminderError.value = null;
+  try {
+    await removeReminder(id, selectedId.value);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
@@ -342,6 +357,24 @@ onMounted(async () => {
       void fetchTodos();
     }
   });
+  unlistenTodosChanged = await listen(TAURI_EVENTS.TODOS_CHANGED, () => {
+    if (todosChangedTimer) clearTimeout(todosChangedTimer);
+    todosChangedTimer = setTimeout(() => {
+      todosChangedTimer = null;
+      void (async () => {
+        await fetchTodos();
+        try {
+          applySession(await companionRefreshSession());
+        } catch {
+          // ignore
+        }
+        if (selectedId.value && !saving.value) {
+          await reload();
+          await fetchReminders(selectedId.value);
+        }
+      })();
+    }, 200);
+  });
   try {
     const settings = await getSettings();
     visibleCount.value = settings.floatVisibleCount;
@@ -359,8 +392,10 @@ onUnmounted(() => {
   document.removeEventListener("pointerup", onPointerUp, true);
   document.removeEventListener("pointercancel", onPointerUp, true);
   window.removeEventListener("keydown", onKeydown);
+  if (todosChangedTimer) clearTimeout(todosChangedTimer);
   unlistenSession?.();
   unlistenSettings?.();
+  unlistenTodosChanged?.();
 });
 </script>
 
@@ -439,7 +474,7 @@ onUnmounted(() => {
       @save="handleSave"
       @transition="transitionTo"
       @add-reminder="handleAddReminder"
-      @remove-reminder="(id) => selectedId && removeReminder(id, selectedId)"
+      @remove-reminder="handleRemoveReminder"
     />
   </div>
 </template>

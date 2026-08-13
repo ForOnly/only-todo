@@ -1,10 +1,12 @@
-use chrono::{DateTime, Utc};
-use serde_json;
+use chrono::{Duration, Utc};
 
 use crate::domain::{
     priority::Priority,
-    status::TodoStatus,
-    todo::{CreateTodoDto, ListTodoQuery, PaginatedResponse, TodoDto, UpdateTodoDto},
+    status::{StatusActionDto, TodoStatus},
+    todo::{
+        CreateTodoDto, ListTodoQuery, ListWorkbenchQuery, PaginatedResponse, TodoDto,
+        UpdateTodoDto, WorkbenchView,
+    },
 };
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
@@ -17,6 +19,7 @@ const MAX_DESCRIPTION_LEN: usize = 5000;
 const MAX_PAGE_SIZE: u32 = 200;
 const MAX_TAGS: usize = 10;
 const MAX_TAG_LEN: usize = 30;
+const TODAY_FETCH_LIMIT: u32 = 100;
 
 pub struct TodoService;
 
@@ -66,6 +69,7 @@ impl TodoService {
 
     pub fn restore(db: &Database, id: &str) -> Result<TodoDto, AppError> {
         let todo = TodoRepository::restore(db, id)?;
+        ReminderRepository::reenable_after_restore(db, id)?;
         Ok(todo.into())
     }
 
@@ -79,15 +83,7 @@ impl TodoService {
         db: &Database,
         mut query: ListTodoQuery,
     ) -> Result<PaginatedResponse<TodoDto>, AppError> {
-        if query.page == 0 {
-            query.page = 1;
-        }
-        if query.page_size == 0 || query.page_size > MAX_PAGE_SIZE {
-            return Err(AppError::ValidationError {
-                message: format!("page_size must be between 1 and {MAX_PAGE_SIZE}"),
-            });
-        }
-
+        normalize_page(&mut query.page, &mut query.page_size)?;
         let result = TodoRepository::list(db, &query)?;
         Ok(PaginatedResponse {
             items: result.items.into_iter().map(TodoDto::from).collect(),
@@ -95,6 +91,152 @@ impl TodoService {
             page: result.page,
             page_size: result.page_size,
         })
+    }
+
+    /// 工作台智能视图：视图语义集中在后端。
+    pub fn list_workbench(
+        db: &Database,
+        query: ListWorkbenchQuery,
+    ) -> Result<PaginatedResponse<TodoDto>, AppError> {
+        let mut page = query.page;
+        let mut page_size = query.page_size;
+        normalize_page(&mut page, &mut page_size)?;
+
+        let keyword = query.keyword.filter(|k| !k.trim().is_empty());
+
+        match query.view {
+            WorkbenchView::Today => {
+                let now = Utc::now();
+                let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let end = start + Duration::days(1);
+                let due_query = ListTodoQuery {
+                    status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
+                    due_date_after: Some(start.to_rfc3339()),
+                    due_date_before: Some(end.to_rfc3339()),
+                    keyword: keyword.clone(),
+                    sort_by: query.sort_by.clone(),
+                    sort_order: query.sort_order.clone(),
+                    page: 1,
+                    page_size: TODAY_FETCH_LIMIT,
+                    ..Default::default()
+                };
+                let doing_query = ListTodoQuery {
+                    status: Some(vec![TodoStatus::Doing]),
+                    keyword: keyword.clone(),
+                    sort_by: query.sort_by.clone(),
+                    sort_order: query.sort_order.clone(),
+                    page: 1,
+                    page_size: TODAY_FETCH_LIMIT,
+                    ..Default::default()
+                };
+                let due = TodoRepository::list(db, &due_query)?;
+                let doing = TodoRepository::list(db, &doing_query)?;
+                let mut map = std::collections::HashMap::new();
+                for todo in due.items.into_iter().chain(doing.items) {
+                    map.insert(todo.id.clone(), todo);
+                }
+                let mut items: Vec<_> = map.into_values().collect();
+                sort_todos_in_memory(&mut items, &query.sort_by, &query.sort_order);
+                let total = items.len() as u64;
+                Ok(PaginatedResponse {
+                    items: items.into_iter().map(TodoDto::from).collect(),
+                    total,
+                    page: 1,
+                    page_size: TODAY_FETCH_LIMIT,
+                })
+            }
+            WorkbenchView::Overdue => {
+                let start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+                Self::list(
+                    db,
+                    ListTodoQuery {
+                        status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
+                        due_date_before: Some(start.to_rfc3339()),
+                        keyword,
+                        sort_by: query.sort_by,
+                        sort_order: query.sort_order,
+                        page,
+                        page_size,
+                        ..Default::default()
+                    },
+                )
+            }
+            WorkbenchView::Doing => Self::list(
+                db,
+                ListTodoQuery {
+                    status: Some(vec![TodoStatus::Doing]),
+                    keyword,
+                    sort_by: query.sort_by,
+                    sort_order: query.sort_order,
+                    page,
+                    page_size,
+                    ..Default::default()
+                },
+            ),
+            WorkbenchView::All => Self::list(
+                db,
+                ListTodoQuery {
+                    status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
+                    keyword,
+                    sort_by: query.sort_by,
+                    sort_order: query.sort_order,
+                    page,
+                    page_size,
+                    ..Default::default()
+                },
+            ),
+            WorkbenchView::Done => Self::list(
+                db,
+                ListTodoQuery {
+                    status: Some(vec![TodoStatus::Done]),
+                    keyword,
+                    sort_by: query.sort_by,
+                    sort_order: query.sort_order,
+                    page,
+                    page_size,
+                    ..Default::default()
+                },
+            ),
+            WorkbenchView::Archived => Self::list(
+                db,
+                ListTodoQuery {
+                    status: Some(vec![TodoStatus::Archived]),
+                    include_archived: Some(true),
+                    keyword,
+                    sort_by: query.sort_by,
+                    sort_order: query.sort_order,
+                    page,
+                    page_size,
+                    ..Default::default()
+                },
+            ),
+            WorkbenchView::Trash => Self::list(
+                db,
+                ListTodoQuery {
+                    include_deleted: Some(true),
+                    include_archived: Some(true),
+                    keyword,
+                    sort_by: query.sort_by,
+                    sort_order: query.sort_order,
+                    page,
+                    page_size,
+                    ..Default::default()
+                },
+            ),
+            WorkbenchView::Tag => Self::list(
+                db,
+                ListTodoQuery {
+                    status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
+                    tags: query.tag.map(|t| vec![t]),
+                    keyword,
+                    sort_by: query.sort_by,
+                    sort_order: query.sort_order,
+                    page,
+                    page_size,
+                    ..Default::default()
+                },
+            ),
+        }
     }
 
     pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
@@ -106,7 +248,6 @@ impl TodoService {
     }
 
     pub fn count_due_urgency(db: &Database) -> Result<(u64, u64), AppError> {
-        use chrono::{Duration, Utc};
         let now = Utc::now();
         let start_of_today = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let start = start_of_today.and_utc();
@@ -117,6 +258,10 @@ impl TodoService {
         Ok((overdue, due_today))
     }
 
+    pub fn allowed_transitions(status: TodoStatus) -> Vec<StatusActionDto> {
+        status.allowed_transitions()
+    }
+
     pub fn transition(db: &Database, id: &str, target: TodoStatus) -> Result<TodoDto, AppError> {
         let todo = TodoRepository::get_by_id(db, id)?;
         if todo.deleted_at.is_some() {
@@ -125,7 +270,7 @@ impl TodoService {
             });
         }
 
-        if !is_valid_transition(todo.status, target) {
+        if !todo.status.can_transition_to(target) {
             return Err(AppError::InvalidTransition {
                 message: format!(
                     "cannot transition from {} to {}",
@@ -148,22 +293,48 @@ impl TodoService {
     }
 }
 
-fn is_valid_transition(from: TodoStatus, to: TodoStatus) -> bool {
-    if from == to {
-        return true;
+fn normalize_page(page: &mut u32, page_size: &mut u32) -> Result<(), AppError> {
+    if *page == 0 {
+        *page = 1;
     }
-    matches!(
-        (from, to),
-        (TodoStatus::Todo, TodoStatus::Doing)
-            | (TodoStatus::Todo, TodoStatus::Done)
-            | (TodoStatus::Todo, TodoStatus::Archived)
-            | (TodoStatus::Doing, TodoStatus::Todo)
-            | (TodoStatus::Doing, TodoStatus::Done)
-            | (TodoStatus::Doing, TodoStatus::Archived)
-            | (TodoStatus::Done, TodoStatus::Todo)
-            | (TodoStatus::Done, TodoStatus::Archived)
-            | (TodoStatus::Archived, TodoStatus::Todo)
-    )
+    if *page_size == 0 || *page_size > MAX_PAGE_SIZE {
+        return Err(AppError::ValidationError {
+            message: format!("page_size must be between 1 and {MAX_PAGE_SIZE}"),
+        });
+    }
+    Ok(())
+}
+
+fn sort_todos_in_memory(
+    items: &mut [crate::domain::todo::Todo],
+    sort_by: &str,
+    sort_order: &str,
+) {
+    let desc = sort_order.eq_ignore_ascii_case("desc");
+    items.sort_by(|a, b| {
+        let ord = match sort_by {
+            "createdAt" | "created_at" => a.created_at.cmp(&b.created_at),
+            "updatedAt" | "updated_at" => a.updated_at.cmp(&b.updated_at),
+            "completedAt" | "completed_at" => a.completed_at.cmp(&b.completed_at),
+            "dueDate" | "due_date" => a.due_date.cmp(&b.due_date),
+            "title" => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            _ => priority_rank(a.priority).cmp(&priority_rank(b.priority)),
+        };
+        if desc {
+            ord.reverse()
+        } else {
+            ord
+        }
+    });
+}
+
+fn priority_rank(priority: Priority) -> u8 {
+    match priority {
+        Priority::Urgent => 4,
+        Priority::High => 3,
+        Priority::Medium => 2,
+        Priority::Low => 1,
+    }
 }
 
 fn validate_title(title: &str) -> Result<(), AppError> {
@@ -202,11 +373,21 @@ fn validate_tags(tags: &[String]) -> Result<(), AppError> {
     Ok(())
 }
 
-#[allow(dead_code)]
-fn parse_datetime(value: &str) -> Result<DateTime<Utc>, AppError> {
-    DateTime::parse_from_rfc3339(value)
-        .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|error| AppError::ValidationError {
-            message: format!("invalid datetime: {error}"),
-        })
+impl Default for ListTodoQuery {
+    fn default() -> Self {
+        Self {
+            status: None,
+            priority: None,
+            tags: None,
+            keyword: None,
+            due_date_before: None,
+            due_date_after: None,
+            include_archived: None,
+            include_deleted: None,
+            sort_by: "priority".into(),
+            sort_order: "desc".into(),
+            page: 1,
+            page_size: 50,
+        }
+    }
 }

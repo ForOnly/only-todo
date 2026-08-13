@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Utc};
 
 use crate::domain::reminder::{CreateReminderDto, ReminderDto, RepeatType, UpdateReminderDto};
 use crate::errors::AppError;
@@ -9,7 +9,6 @@ use crate::repository::todo_repository::TodoRepository;
 
 const MAX_REMINDERS_PER_TODO: i64 = 5;
 const SNOOZE_OPTIONS: [i64; 4] = [5, 15, 30, 60];
-const MAX_SNOOZE_COUNT: i32 = 3;
 
 pub struct ReminderService;
 
@@ -101,9 +100,4 @@ fn parse_future_datetime(value: &str) -> Result<DateTime<Utc>, AppError> {
         .map_err(|error| AppError::ValidationError {
             message: format!("invalid datetime: {error}"),
         })
-}
-
-#[allow(dead_code)]
-fn snooze_until(minutes: i64) -> DateTime<Utc> {
-    Utc::now() + ChronoDuration::minutes(minutes)
 }

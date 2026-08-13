@@ -10,9 +10,11 @@ import type {
   TodoDto,
   WorkbenchView,
 } from "@/api/types";
-import { listAllTags, listTodos, transitionTodo } from "@/api/todos";
+import { listAllTags, listTodos, getTodo, transitionTodo } from "@/api/todos";
+import { listEvents } from "@/api/events";
 import { getSettings, updateSettings } from "@/api/settings";
 import { showFloatingWindow } from "@/api/window";
+import type { EventDto } from "@/api/types";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
 import CreateTodoModal from "@/components/todo/CreateTodoModal.vue";
@@ -22,7 +24,7 @@ import TaskInspector from "@/components/workbench/TaskInspector.vue";
 import { TAURI_EVENTS } from "@/constants/events";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
-import { dueDateRangeForFilter } from "@/utils/date";
+import { dueDateRangeForFilter, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 import { parseListDefaultSort } from "@/utils/listSort";
 
@@ -52,6 +54,7 @@ const {
   reminders,
   loading: remindersLoading,
   error: remindersError,
+  fetchReminders,
   addReminder,
   updateReminder,
   removeReminder,
@@ -67,6 +70,7 @@ const {
   editTags,
   saving,
   error: detailError,
+  isDirty,
   scheduleAutosave,
   flushAutosave,
   reload,
@@ -77,10 +81,15 @@ const {
   await fetchTodos();
   await refreshOverdueCount();
   await loadTags();
+  await loadRecentEvents();
 });
 
 const settingsOpen = ref(false);
+const settingsError = ref<string | null>(null);
+const settingsSaving = ref(false);
 const createOpen = ref(false);
+/** 打开新建弹窗时可选预填截止日期（今日空态） */
+const createInitialDue = ref<string | null>(null);
 const notificationEnabled = ref(true);
 const listDefaultSortRaw = ref('{"sort_by":"priority","sort_order":"desc"}');
 const floatAlwaysOnTop = ref(true);
@@ -93,6 +102,7 @@ const allTags = ref<string[]>([]);
 const overdueCount = ref(0);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
+const recentEvents = ref<EventDto[]>([]);
 const eventUnlisteners: (() => void)[] = [];
 
 onMounted(async () => {
@@ -116,6 +126,7 @@ onMounted(async () => {
   await fetchTodos();
   await loadTags();
   await refreshOverdueCount();
+  await loadRecentEvents();
 
   eventUnlisteners.push(
     await listen<string>(TAURI_EVENTS.NAVIGATE_TO_TODO, (event) => {
@@ -125,13 +136,38 @@ onMounted(async () => {
 
   eventUnlisteners.push(
     await listen(TAURI_EVENTS.CREATE_TODO, () => {
-      createOpen.value = true;
+      openCreateModal();
     }),
   );
 
   eventUnlisteners.push(
     await listen(TAURI_EVENTS.OPEN_SETTINGS, () => {
+      settingsError.value = null;
       settingsOpen.value = true;
+    }),
+  );
+
+  // 跨窗写操作后刷新；无 dirty 不回写，避免覆盖伴侣修改与 update 风暴
+  let todosChangedTimer: ReturnType<typeof setTimeout> | null = null;
+  eventUnlisteners.push(
+    await listen(TAURI_EVENTS.TODOS_CHANGED, () => {
+      if (todosChangedTimer) clearTimeout(todosChangedTimer);
+      todosChangedTimer = setTimeout(() => {
+        todosChangedTimer = null;
+        void (async () => {
+          await fetchTodos();
+          await refreshOverdueCount();
+          await loadTags();
+          await loadRecentEvents();
+          if (!selectedId.value || saving.value) return;
+          if (isDirty()) {
+            await flushAutosave();
+          } else {
+            await reload();
+            await fetchReminders(selectedId.value);
+          }
+        })();
+      }, 200);
     }),
   );
 
@@ -144,6 +180,14 @@ onUnmounted(() => {
     unlisten();
   }
 });
+
+async function loadRecentEvents() {
+  try {
+    recentEvents.value = await listEvents({ limit: 8 });
+  } catch {
+    recentEvents.value = [];
+  }
+}
 
 async function loadTags() {
   try {
@@ -201,7 +245,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
   if (event.key === "n") {
     event.preventDefault();
-    createOpen.value = true;
+    openCreateModal();
     return;
   }
 
@@ -230,10 +274,40 @@ async function moveSelection(delta: number) {
 
 async function navigateToTodo(id: string | null) {
   await flushAutosave();
+  if (!id) {
+    await selectTodo(null);
+    return;
+  }
+
+  try {
+    const todo = await getTodo(id);
+    if (todo.deletedAt) {
+      if (view.value !== "trash") {
+        view.value = "trash";
+        activeTag.value = null;
+        page.value = 1;
+        await fetchTodos();
+      } else if (!todos.value.some((t) => t.id === id)) {
+        await fetchTodos();
+      }
+    } else if (!todos.value.some((t) => t.id === id)) {
+      // 当前视图可能筛掉该任务；切到「全部」再定位（与恢复后导航一致）
+      if (view.value !== "all" || activeTag.value) {
+        view.value = "all";
+        activeTag.value = null;
+        page.value = 1;
+      }
+      await fetchTodos();
+    }
+  } catch {
+    // get 失败仍尝试选中，由 Inspector 展示错误
+  }
+
   await selectTodo(id);
 }
 
-function openCreateModal() {
+function openCreateModal(opts?: { dueToday?: boolean }) {
+  createInitialDue.value = opts?.dueToday ? localTodayDueInput() : null;
   createOpen.value = true;
 }
 
@@ -288,11 +362,20 @@ async function handleRestore() {
 
 async function handleCreateSubmit(dto: CreateTodoDto) {
   try {
-    await createTodo(dto);
+    const created = await createTodo(dto);
     createOpen.value = false;
+    createInitialDue.value = null;
     createModalRef.value?.resetSubmitting();
     await loadTags();
     await refreshOverdueCount();
+    // 今日视图创建但未带 due 时可能不在列表；稳妥切全部并选中
+    if (view.value === "today" && !todos.value.some((t) => t.id === created.id)) {
+      view.value = "all";
+      activeTag.value = null;
+      page.value = 1;
+      await fetchTodos();
+      await selectTodo(created.id);
+    }
   } catch (err) {
     createModalRef.value?.setError(formatErrorMessage(err));
   }
@@ -350,7 +433,7 @@ function handleChangeSort(next: SortBy) {
 
 function handleEmptyAction(action: "create" | "all") {
   if (action === "create") {
-    openCreateModal();
+    openCreateModal({ dueToday: view.value === "today" });
   } else {
     setView("all");
   }
@@ -374,18 +457,27 @@ async function handleSettingsUpdate(payload: {
   floatHoverPreview?: boolean;
   autostartEnabled?: boolean;
 }) {
-  const settings = await updateSettings(payload);
-  notificationEnabled.value = settings.notificationEnabled;
-  listDefaultSortRaw.value = settings.listDefaultSort;
-  floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
-  floatVisibleCount.value = settings.floatVisibleCount;
-  floatAutoShow.value = settings.floatAutoShow;
-  floatDefaultMode.value = settings.floatDefaultMode;
-  floatHoverPreview.value = settings.floatHoverPreview;
-  autostartEnabled.value = settings.autostartEnabled;
-  if (payload.listDefaultSort) {
-    const sort = parseListDefaultSort(settings.listDefaultSort);
-    setSort(sort.sortBy, sort.sortOrder);
+  settingsSaving.value = true;
+  settingsError.value = null;
+  try {
+    const settings = await updateSettings(payload);
+    notificationEnabled.value = settings.notificationEnabled;
+    listDefaultSortRaw.value = settings.listDefaultSort;
+    floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
+    floatVisibleCount.value = settings.floatVisibleCount;
+    floatAutoShow.value = settings.floatAutoShow;
+    floatDefaultMode.value = settings.floatDefaultMode;
+    floatHoverPreview.value = settings.floatHoverPreview;
+    autostartEnabled.value = settings.autostartEnabled;
+    if (payload.listDefaultSort) {
+      const sort = parseListDefaultSort(settings.listDefaultSort);
+      setSort(sort.sortBy, sort.sortOrder);
+    }
+    settingsOpen.value = false;
+  } catch (err) {
+    settingsError.value = formatErrorMessage(err);
+  } finally {
+    settingsSaving.value = false;
   }
 }
 </script>
@@ -396,7 +488,10 @@ async function handleSettingsUpdate(payload: {
       v-model:keyword="keyword"
       @search="search"
       @create="openCreateModal"
-      @settings="settingsOpen = true"
+      @settings="
+        settingsError = null;
+        settingsOpen = true;
+      "
       @open-companion="handleOpenCompanion"
     />
 
@@ -455,10 +550,24 @@ async function handleSettingsUpdate(payload: {
 
     <p v-if="listError" class="global-error">{{ listError }}</p>
 
+    <aside v-if="recentEvents.length" class="activity" aria-label="最近活动">
+      <h2 class="activity-title">最近活动</h2>
+      <ul class="activity-list">
+        <li v-for="ev in recentEvents" :key="ev.id" class="activity-item">
+          <span class="activity-type">{{ ev.eventType }}</span>
+          <span class="activity-meta">{{ ev.entityType }} · {{ ev.createdAt }}</span>
+        </li>
+      </ul>
+    </aside>
+
     <CreateTodoModal
       ref="createModalRef"
       :open="createOpen"
-      @close="createOpen = false"
+      :initial-due-date="createInitialDue"
+      @close="
+        createOpen = false;
+        createInitialDue = null;
+      "
       @submit="handleCreateSubmit"
     />
 
@@ -472,6 +581,8 @@ async function handleSettingsUpdate(payload: {
       :float-default-mode="floatDefaultMode"
       :float-hover-preview="floatHoverPreview"
       :autostart-enabled="autostartEnabled"
+      :error="settingsError"
+      :saving="settingsSaving"
       @close="settingsOpen = false"
       @update="handleSettingsUpdate"
     />
@@ -521,5 +632,50 @@ body {
   padding: 8px 16px;
   background: #fef2f2;
   color: #dc2626;
+}
+
+.activity {
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 8px 16px 12px;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.activity-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.activity-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity-item {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.activity-type {
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 140px;
+}
+
+.activity-meta {
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

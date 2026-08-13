@@ -66,6 +66,7 @@ impl TodoRepository {
             .map_err(|error| AppError::DbError {
                 message: error.to_string(),
             })?;
+            sync_todo_tags(conn, &todo.id, &todo.tags)?;
             Ok(todo)
         })
     }
@@ -114,6 +115,9 @@ impl TodoRepository {
             .map_err(|error| AppError::DbError {
                 message: error.to_string(),
             })?;
+            if dto.tags.is_some() {
+                sync_todo_tags(conn, &todo.id, &todo.tags)?;
+            }
             Ok(todo)
         })
     }
@@ -260,7 +264,12 @@ impl TodoRepository {
     pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
         db.with_conn(|conn| {
             let mut stmt = conn
-                .prepare("SELECT tags FROM todos WHERE deleted_at IS NULL")
+                .prepare(
+                    "SELECT DISTINCT t.name FROM tags t
+                     INNER JOIN todo_tags tt ON tt.tag_name = t.name
+                     INNER JOIN todos todo ON todo.id = tt.todo_id AND todo.deleted_at IS NULL
+                     ORDER BY t.name COLLATE NOCASE",
+                )
                 .map_err(|error| AppError::DbError {
                     message: error.to_string(),
                 })?;
@@ -269,21 +278,39 @@ impl TodoRepository {
                 .map_err(|error| AppError::DbError {
                     message: error.to_string(),
                 })?;
-
-            let mut tags = std::collections::BTreeSet::new();
+            let mut tags = Vec::new();
             for row in rows {
-                let json = row.map_err(|error| AppError::DbError {
+                tags.push(row.map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?);
+            }
+            Ok(tags)
+        })
+    }
+
+    /// 将 todos.tags JSON 回填到规范化表（幂等）。
+    pub fn backfill_normalized_tags(db: &Database) -> Result<(), AppError> {
+        db.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT id, tags FROM todos")
+                .map_err(|error| AppError::DbError {
                     message: error.to_string(),
                 })?;
-                if let Ok(values) = serde_json::from_str::<Vec<String>>(&json) {
-                    for tag in values {
-                        if !tag.trim().is_empty() {
-                            tags.insert(tag);
-                        }
-                    }
-                }
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+            for row in rows {
+                let (id, json) = row.map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+                let tags: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+                sync_todo_tags(conn, &id, &tags)?;
             }
-            Ok(tags.into_iter().collect())
+            Ok(())
         })
     }
 
@@ -323,8 +350,11 @@ impl TodoRepository {
 
         if let Some(tags) = &query.tags {
             for tag in tags {
-                conditions.push("tags LIKE ?".to_string());
-                bind_values.push(format!("%\"{tag}\"%"));
+                conditions.push(
+                    "EXISTS (SELECT 1 FROM todo_tags tt WHERE tt.todo_id = todos.id AND tt.tag_name = ? COLLATE NOCASE)"
+                        .to_string(),
+                );
+                bind_values.push(tag.clone());
             }
         }
 
@@ -398,6 +428,43 @@ impl TodoRepository {
             })
         })
     }
+}
+
+fn sync_todo_tags(
+    conn: &rusqlite::Connection,
+    todo_id: &str,
+    tags: &[String],
+) -> Result<(), AppError> {
+    conn.execute(
+        "DELETE FROM todo_tags WHERE todo_id = ?1",
+        params![todo_id],
+    )
+    .map_err(|error| AppError::DbError {
+        message: error.to_string(),
+    })?;
+
+    let now = Utc::now().to_rfc3339();
+    for tag in tags {
+        let name = tag.trim();
+        if name.is_empty() {
+            continue;
+        }
+        conn.execute(
+            "INSERT OR IGNORE INTO tags (name, created_at) VALUES (?1, ?2)",
+            params![name, now],
+        )
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+        conn.execute(
+            "INSERT OR IGNORE INTO todo_tags (todo_id, tag_name) VALUES (?1, ?2)",
+            params![todo_id, name],
+        )
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+    }
+    Ok(())
 }
 
 fn build_order_clause(sort_by: &str, sort_order: &str) -> String {

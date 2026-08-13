@@ -29,6 +29,20 @@ run = "npm run format"
 description = "Prettier 检查前端格式"
 run = "npm run format:check"
 
+[tasks.lint]
+description = "ESLint 检查前端"
+run = "npm run lint"
+
+[tasks.clippy]
+description = "Rust clippy（警告当错误）"
+run = "cargo clippy -- -D warnings"
+dir = "src-tauri"
+
+[tasks.gen-types]
+description = "从 Rust domain 导出 TypeScript 类型"
+run = "cargo run --bin export-ts"
+dir = "src-tauri"
+
 [tasks.clean]
 description = "清理 Rust 编译产物"
 run = "cargo clean"

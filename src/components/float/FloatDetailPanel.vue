@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
@@ -15,9 +15,9 @@ import {
   type TodoStatus,
 } from "@/api/types";
 import { formatDate } from "@/utils/date";
-import { statusActionsFor } from "@/utils/statusActions";
+import { useStatusActions } from "@/utils/statusActions";
 
-defineProps<{
+const props = defineProps<{
   detail: TodoDto;
   editTitle: string;
   editDescription: string;
@@ -44,6 +44,8 @@ const emit = defineEmits<{
 
 const reminderInput = ref("");
 const repeatType = ref<RepeatType>("none");
+const statusRef = computed(() => props.detail.status);
+const { actions } = useStatusActions(statusRef);
 
 function submitReminder() {
   if (!reminderInput.value) return;
@@ -110,7 +112,7 @@ function submitReminder() {
       <span>状态 · {{ STATUS_LABELS[detail.status] }}</span>
       <div class="status-buttons">
         <AppButton
-          v-for="action in statusActionsFor(detail.status)"
+          v-for="action in actions"
           :key="action.target"
           :variant="action.target === 'Done' ? 'primary' : 'ghost'"
           @click="emit('transition', action.target)"
@@ -134,9 +136,10 @@ function submitReminder() {
       </div>
       <div v-if="remindersLoading" class="hint">加载提醒...</div>
       <ul v-else class="reminder-list">
-        <li v-for="item in reminders" :key="item.id">
-          <span>{{ formatDate(item.remindAt) }}</span>
+        <li v-for="item in reminders" :key="item.id" :class="{ disabled: !item.enabled }">
+          <span>{{ formatDate(item.nextTriggerAt) }}</span>
           <span>{{ REPEAT_TYPE_LABELS[item.repeatType] }}</span>
+          <span v-if="!item.enabled" class="hint">已关闭</span>
           <button class="link" type="button" @click="emit('removeReminder', item.id)">删除</button>
         </li>
       </ul>
@@ -211,6 +214,10 @@ function submitReminder() {
   padding: 6px 0;
   font-size: 13px;
   border-bottom: 1px solid #f3f4f6;
+}
+
+.reminder-list li.disabled {
+  opacity: 0.65;
 }
 
 .link {

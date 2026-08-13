@@ -2,7 +2,6 @@ use std::sync::Mutex;
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
-use tauri::Manager;
 
 use crate::errors::AppError;
 use crate::infrastructure::filesystem;
@@ -49,6 +48,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 8,
         sql: include_str!("../../../migrations/008_companion_fill.sql"),
     },
+    Migration {
+        version: 9,
+        sql: include_str!("../../../migrations/009_normalize_tags.sql"),
+    },
 ];
 
 impl Database {
@@ -63,9 +66,17 @@ impl Database {
                 message: error.to_string(),
             })?;
         run_migrations(&conn)?;
-        Ok(Self {
+        let db = Self {
             conn: Mutex::new(conn),
-        })
+        };
+        // 幂等：JSON tags → tags / todo_tags（失败则阻止启动，避免筛选与展示不一致）
+        crate::repository::todo_repository::TodoRepository::backfill_normalized_tags(&db).map_err(
+            |error| {
+                tracing::error!("tag normalize backfill failed: {error}");
+                error
+            },
+        )?;
+        Ok(db)
     }
 
     pub fn with_conn<T, F>(&self, f: F) -> Result<T, AppError>

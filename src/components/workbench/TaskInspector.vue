@@ -16,7 +16,7 @@ import {
   type TodoStatus,
 } from "@/api/types";
 import { formatDate, toLocalDatetimeInput } from "@/utils/date";
-import { statusActionsFor } from "@/utils/statusActions";
+import { useStatusActions } from "@/utils/statusActions";
 
 const props = defineProps<{
   detail: TodoDto | null;
@@ -57,9 +57,10 @@ const editingReminderId = ref<string | null>(null);
 const editingReminderAt = ref("");
 
 const isDeleted = computed(() => Boolean(props.detail?.deletedAt));
-const actions = computed(() =>
-  props.detail && !isDeleted.value ? statusActionsFor(props.detail.status) : [],
+const statusRef = computed(() =>
+  props.detail && !isDeleted.value ? props.detail.status : null,
 );
+const { actions } = useStatusActions(statusRef);
 
 const tagSuggestions = computed(() => {
   const current = new Set(props.editTags.map((t) => t.toLowerCase()));
@@ -109,7 +110,7 @@ function submitReminder() {
 
 function startEditReminder(reminder: ReminderDto) {
   editingReminderId.value = reminder.id;
-  editingReminderAt.value = toLocalDatetimeInput(reminder.remindAt);
+  editingReminderAt.value = toLocalDatetimeInput(reminder.nextTriggerAt);
 }
 
 function commitEditReminder() {
@@ -271,14 +272,29 @@ function cancelEditReminder() {
                   </div>
                 </template>
                 <template v-else>
-                  <div class="reminder-main">
-                    <span>{{ formatDate(reminder.remindAt) }}</span>
+                  <div class="reminder-main" :class="{ disabled: !reminder.enabled }">
+                    <span>{{ formatDate(reminder.nextTriggerAt) }}</span>
                     <span class="muted">{{ REPEAT_TYPE_LABELS[reminder.repeatType] }}</span>
+                    <span v-if="!reminder.enabled" class="muted">已关闭</span>
+                    <span
+                      v-else-if="reminder.snoozeCount > 0"
+                      class="muted"
+                      title="原定时间"
+                    >
+                      原定 {{ formatDate(reminder.remindAt) }}
+                    </span>
                   </div>
                   <div class="reminder-actions">
-                    <AppButton variant="ghost" @click="startEditReminder(reminder)">改期</AppButton>
+                    <AppButton
+                      variant="ghost"
+                      :disabled="!reminder.enabled"
+                      @click="startEditReminder(reminder)"
+                    >
+                      改期
+                    </AppButton>
                     <select
                       class="snooze"
+                      :disabled="!reminder.enabled"
                       @change="
                         emit(
                           'snoozeReminder',
@@ -471,6 +487,10 @@ function cancelEditReminder() {
   flex-direction: column;
   gap: 2px;
   font-size: 13px;
+}
+
+.reminder-main.disabled {
+  opacity: 0.65;
 }
 
 .reminder-actions {

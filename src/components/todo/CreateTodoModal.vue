@@ -14,6 +14,8 @@ const props = defineProps<{
   compact?: boolean;
   /** 默认 true；悬浮窗内禁用 Teleport */
   teleport?: boolean;
+  /** 打开时预填截止日期（datetime-local） */
+  initialDueDate?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -31,6 +33,9 @@ watch(
   async (isOpen) => {
     if (isOpen) {
       form.value = DEFAULT_CREATE_TODO_FORM();
+      if (props.initialDueDate) {
+        form.value.dueDate = props.initialDueDate;
+      }
       error.value = null;
       submitting.value = false;
       await nextTick();

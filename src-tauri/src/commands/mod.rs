@@ -1,3 +1,4 @@
+pub mod events;
 pub mod reminder;
 pub mod settings;
 pub mod todo;

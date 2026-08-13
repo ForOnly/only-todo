@@ -3,11 +3,22 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CreateTodoDto,
   ListTodoQuery,
-  PaginatedResponse,
+  ListWorkbenchQuery,
+  PaginatedTodos,
+  StatusActionDto,
   TodoDto,
   TodoStatus,
   UpdateTodoDto,
+  WorkbenchView,
 } from "@/api/types";
+
+/** 兼容旧 PaginatedResponse 形状 */
+export type PaginatedResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
 
 /** Tauri Command: create_todo */
 export async function createTodo(dto: CreateTodoDto): Promise<TodoDto> {
@@ -39,9 +50,27 @@ export async function listTodos(query: ListTodoQuery = {}): Promise<PaginatedRes
   return invoke("list_todos", { query });
 }
 
+/** Tauri Command: list_workbench_todos */
+export async function listWorkbenchTodos(
+  query: ListWorkbenchQuery,
+): Promise<PaginatedResponse<TodoDto>> {
+  const result = await invoke<PaginatedTodos>("list_workbench_todos", { query });
+  return {
+    items: result.items,
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+  };
+}
+
 /** Tauri Command: transition_todo */
 export async function transitionTodo(id: string, status: TodoStatus): Promise<TodoDto> {
   return invoke("transition_todo", { id, status });
+}
+
+/** Tauri Command: get_allowed_transitions */
+export async function getAllowedTransitions(status: TodoStatus): Promise<StatusActionDto[]> {
+  return invoke("get_allowed_transitions", { status });
 }
 
 /** Tauri Command: show_main_window */
@@ -53,3 +82,5 @@ export async function showMainWindow(todoId?: string): Promise<void> {
 export async function listAllTags(): Promise<string[]> {
   return invoke("list_all_tags");
 }
+
+export type { WorkbenchView };

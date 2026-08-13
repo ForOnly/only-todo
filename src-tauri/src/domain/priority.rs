@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "PascalCase")]
+#[ts(export)]
 pub enum Priority {
     Low,
     Medium,
@@ -19,6 +21,7 @@ impl Priority {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "Low" => Some(Self::Low),

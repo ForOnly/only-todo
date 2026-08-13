@@ -16,6 +16,9 @@ const props = defineProps<{
   floatDefaultMode: FloatDefaultMode;
   floatHoverPreview: boolean;
   autostartEnabled: boolean;
+  /** 父组件保存失败时展示；成功时父组件关闭弹窗 */
+  error?: string | null;
+  saving?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -65,7 +68,6 @@ function save() {
     floatHoverPreview: localHoverPreview.value,
     autostartEnabled: localAutostart.value,
   });
-  emit("close");
 }
 </script>
 
@@ -146,8 +148,12 @@ function save() {
       </label>
     </section>
 
+    <p v-if="error" class="error">{{ error }}</p>
+
     <div class="app-modal-actions">
-      <AppButton variant="primary" @click="save">保存</AppButton>
+      <AppButton variant="primary" :disabled="saving" @click="save">
+        {{ saving ? "保存中…" : "保存" }}
+      </AppButton>
     </div>
   </AppModal>
 </template>
@@ -184,6 +190,12 @@ function save() {
   font-size: 12px;
   color: #6b7280;
   line-height: 1.4;
+}
+
+.error {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #b91c1c;
 }
 
 .number-input {

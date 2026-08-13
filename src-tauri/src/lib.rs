@@ -1,9 +1,8 @@
-#![allow(dead_code, unused_imports)]
-
 mod commands;
-mod domain;
+pub mod domain;
 mod errors;
 mod events;
+mod broadcast;
 mod float;
 mod infrastructure;
 mod repository;
@@ -14,14 +13,15 @@ mod state;
 use std::sync::Mutex;
 
 use commands::{
+    events::list_events_cmd,
     health_check,
     reminder::{
         create_reminder, delete_reminder, list_reminders, snooze_reminder, update_reminder,
     },
     settings::{get_settings, update_settings},
     todo::{
-        create_todo, delete_todo, get_todo, list_all_tags, list_todos, restore_todo,
-        transition_todo, update_todo,
+        create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags,
+        list_todos, list_workbench_todos, restore_todo, transition_todo, update_todo,
     },
     window::{
         companion_click_chrome, companion_drag_ended, companion_minimize, companion_open_view,
@@ -30,7 +30,7 @@ use commands::{
         show_main_window, toggle_floating_window,
     },
 };
-use float::host::FloatHost;
+use float::FloatHost;
 use infrastructure::database::Database;
 use infrastructure::filesystem;
 use infrastructure::notification::ensure_toast_registration;
@@ -46,6 +46,14 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 单实例须最先注册，避免其它插件干扰
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -77,7 +85,9 @@ pub fn run() {
             restore_todo,
             get_todo,
             list_todos,
+            list_workbench_todos,
             list_all_tags,
+            get_allowed_transitions,
             transition_todo,
             create_reminder,
             update_reminder,
@@ -86,6 +96,7 @@ pub fn run() {
             snooze_reminder,
             get_settings,
             update_settings,
+            list_events_cmd,
             hide_to_tray,
             show_main_window,
             show_floating_window,

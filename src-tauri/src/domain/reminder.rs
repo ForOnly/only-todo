@@ -1,8 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum RepeatType {
     None,
     Daily,
@@ -18,6 +20,7 @@ impl RepeatType {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "none" => Some(Self::None),
@@ -43,14 +46,16 @@ pub struct Reminder {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct ReminderDto {
     pub id: String,
     pub todo_id: String,
     pub remind_at: String,
     pub repeat_type: RepeatType,
     pub repeat_config: String,
+    #[ts(type = "number")]
     pub snooze_count: i32,
     pub next_trigger_at: String,
     pub enabled: bool,
@@ -75,8 +80,9 @@ impl From<Reminder> for ReminderDto {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct CreateReminderDto {
     pub todo_id: String,
     pub remind_at: String,
@@ -84,8 +90,9 @@ pub struct CreateReminderDto {
     pub repeat_type: Option<RepeatType>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct UpdateReminderDto {
     pub id: String,
     #[serde(default)]

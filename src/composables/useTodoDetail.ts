@@ -32,6 +32,7 @@ export interface UseTodoDetailReturn {
   editTags: Ref<string[]>;
   saving: Ref<boolean>;
   error: Ref<string | null>;
+  isDirty: () => boolean;
   save: () => Promise<boolean>;
   scheduleAutosave: () => void;
   flushAutosave: () => Promise<boolean>;
@@ -177,9 +178,22 @@ export function useTodoDetail(
     await loadDetail(selectedId.value);
   }
 
+  /** 表单相对已加载 detail 是否有未保存变更 */
+  function isDirty(): boolean {
+    if (!detail.value || detail.value.deletedAt) return false;
+    const d = detail.value;
+    if (editTitle.value.trim() !== d.title) return true;
+    if (editDescription.value !== d.description) return true;
+    if (editPriority.value !== d.priority) return true;
+    if (editDueDate.value !== toLocalDatetimeInput(d.dueDate)) return true;
+    if (JSON.stringify(editTags.value) !== JSON.stringify(d.tags)) return true;
+    return false;
+  }
+
   async function save(): Promise<boolean> {
     if (!selectedId.value || !detail.value) return false;
     if (detail.value.deletedAt) return false;
+    if (!isDirty()) return true;
 
     const snap = {
       id: selectedId.value,
@@ -235,7 +249,8 @@ export function useTodoDetail(
       clearTimeout(autosaveTimer);
       autosaveTimer = null;
     }
-    if (!selectedId.value || !detail.value || detail.value.deletedAt) return false;
+    if (!selectedId.value || !detail.value || detail.value.deletedAt) return true;
+    if (!isDirty()) return true;
     return save();
   }
 
@@ -291,6 +306,7 @@ export function useTodoDetail(
     editTags,
     saving,
     error,
+    isDirty,
     save,
     scheduleAutosave,
     flushAutosave,

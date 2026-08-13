@@ -1,45 +1,108 @@
-export type TodoStatus = "Todo" | "Doing" | "Done" | "Archived";
-export type Priority = "Low" | "Medium" | "High" | "Urgent";
-export type RepeatType = "none" | "daily" | "weekly";
-export type SortBy = "priority" | "createdAt" | "updatedAt" | "completedAt" | "dueDate" | "title";
+/**
+ * 前端类型入口：契约类型由 Rust（ts-rs）生成；本文件补充 UI 专用类型与常量。
+ * 重新生成：`cd src-tauri && cargo run --bin export-ts`
+ */
+export type {
+  BodyView,
+  ChromeKind,
+  CompanionDragEndResult,
+  CompanionPlacement,
+  CompanionSession,
+  CompanionSurface,
+  CompanionVisibility,
+  DockEdge,
+  EventDto,
+  HomeShape,
+  PaginatedTodos,
+  PanelMode,
+  Priority,
+  ReminderDto,
+  RepeatType,
+  SettingsDto,
+  StatusActionDto,
+  TodoDto,
+  TodoStatus,
+  WorkbenchView,
+} from "./generated";
+
+import type {
+  CreateReminderDto as GeneratedCreateReminderDto,
+  CreateTodoDto as GeneratedCreateTodoDto,
+  HomeShape,
+  Priority,
+  RepeatType,
+  TodoStatus,
+} from "./generated";
+
+/** 查询/更新 DTO：前端按需传字段（serde 侧有 default） */
+export type CreateTodoDto = Pick<GeneratedCreateTodoDto, "title"> &
+  Partial<Omit<GeneratedCreateTodoDto, "title">>;
+export type UpdateTodoDto = { id: string } & Partial<{
+  title: string;
+  description: string;
+  priority: Priority;
+  dueDate: string | null;
+  tags: string[];
+}>;
+export type ListTodoQuery = Partial<{
+  status: import("./generated").TodoStatus[];
+  priority: Priority[];
+  tags: string[];
+  keyword: string;
+  dueDateBefore: string;
+  dueDateAfter: string;
+  includeArchived: boolean;
+  includeDeleted: boolean;
+  sortBy: string;
+  sortOrder: string;
+  page: number;
+  pageSize: number;
+}>;
+export type ListWorkbenchQuery = {
+  view: import("./generated").WorkbenchView;
+  tag?: string;
+  keyword?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  page?: number;
+  pageSize?: number;
+};
+export type CreateReminderDto = GeneratedCreateReminderDto;
+export type UpdateReminderDto = { id: string } & Partial<{
+  remindAt: string;
+  enabled: boolean;
+}>;
+export type UpdateSettingsDto = Partial<{
+  notificationEnabled: boolean;
+  listDefaultSort: string;
+  floatAlwaysOnTop: boolean;
+  floatVisibleCount: number;
+  floatAutoShow: boolean;
+  floatDefaultMode: HomeShape;
+  floatHoverPreview: boolean;
+  autostartEnabled: boolean;
+}>;
+export type ListEventsQuery = Partial<{
+  after: string;
+  limit: number;
+}>;
+
+export type FloatDefaultMode = HomeShape;
+
+export type SortBy =
+  | "priority"
+  | "createdAt"
+  | "updatedAt"
+  | "completedAt"
+  | "dueDate"
+  | "title";
 export type SortOrder = "asc" | "desc";
 export type DueDateFilter = "all" | "today" | "overdue";
-export type DockEdge = "left" | "right";
-export type HomeShape = "ball" | "panel";
-export type FloatDefaultMode = HomeShape;
-export type CompanionVisibility = "shown" | "hidden";
-export type CompanionPlacement = "free" | "docked";
-export type PanelMode = "closed" | "preview" | "pinned";
-export type ChromeKind = "ball" | "strip" | "hidden";
-export type BodyView = "todoMini";
-export type CompanionSurface = "chrome" | "body";
 
 /** settings 表中 list.default_sort 的 JSON 结构 */
 export interface ListDefaultSort {
   sortBy: SortBy;
   sortOrder: SortOrder;
-}
-
-export interface TodoDto {
-  id: string;
-  title: string;
-  description: string;
-  status: TodoStatus;
-  priority: Priority;
-  dueDate: string | null;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-  completedAt: string | null;
-  deletedAt: string | null;
-}
-
-export interface CreateTodoDto {
-  title: string;
-  description?: string;
-  priority?: Priority;
-  dueDate?: string;
-  tags?: string[];
 }
 
 /** CreateTodoModal 表单模型，字段均有明确默认值 */
@@ -53,112 +116,11 @@ export interface CreateTodoFormModel {
   tagsText: string;
 }
 
-export interface UpdateTodoDto {
-  id: string;
-  title?: string;
-  description?: string;
-  priority?: Priority;
-  dueDate?: string | null;
-  tags?: string[];
-}
-
-export type WorkbenchView =
-  | "today"
-  | "overdue"
-  | "doing"
-  | "all"
-  | "done"
-  | "archived"
-  | "trash"
-  | "tag";
-
-export interface ListTodoQuery {
-  status?: TodoStatus[];
-  priority?: Priority[];
-  tags?: string[];
-  keyword?: string;
-  dueDateBefore?: string;
-  dueDateAfter?: string;
-  includeArchived?: boolean;
-  includeDeleted?: boolean;
-  sortBy?: SortBy;
-  sortOrder?: SortOrder;
-  page?: number;
-  pageSize?: number;
-}
-
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
   page: number;
   pageSize: number;
-}
-
-export interface ReminderDto {
-  id: string;
-  todoId: string;
-  remindAt: string;
-  repeatType: RepeatType;
-  repeatConfig: string;
-  snoozeCount: number;
-  nextTriggerAt: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateReminderDto {
-  todoId: string;
-  remindAt: string;
-  repeatType?: RepeatType;
-}
-
-export interface UpdateReminderDto {
-  id: string;
-  remindAt?: string;
-  enabled?: boolean;
-}
-
-export interface SettingsDto {
-  notificationEnabled: boolean;
-  listDefaultSort: string;
-  floatAlwaysOnTop: boolean;
-  floatVisibleCount: number;
-  floatAutoShow: boolean;
-  floatDefaultMode: FloatDefaultMode;
-  floatHoverPreview: boolean;
-  autostartEnabled: boolean;
-}
-
-export interface UpdateSettingsDto {
-  notificationEnabled?: boolean;
-  listDefaultSort?: string;
-  floatAlwaysOnTop?: boolean;
-  floatVisibleCount?: number;
-  floatAutoShow?: boolean;
-  floatDefaultMode?: FloatDefaultMode;
-  floatHoverPreview?: boolean;
-  autostartEnabled?: boolean;
-}
-
-export interface CompanionSession {
-  visibility: CompanionVisibility;
-  placement: CompanionPlacement;
-  homeShape: HomeShape;
-  panelMode: PanelMode;
-  chrome: ChromeKind;
-  dockEdge: DockEdge;
-  dockY: number;
-  bodyView: BodyView;
-  hoverPreview: boolean;
-  activeCount: number;
-  overdueCount: number;
-  dueTodayCount: number;
-}
-
-export interface CompanionDragEndResult {
-  stillDragging: boolean;
-  session: CompanionSession;
 }
 
 /** Tauri Command 返回的结构化错误 */
@@ -168,7 +130,6 @@ export interface AppError {
 }
 
 export const PRIORITY_OPTIONS: Priority[] = ["Urgent", "High", "Medium", "Low"];
-export const STATUS_OPTIONS: TodoStatus[] = ["Todo", "Doing", "Done", "Archived"];
 export const REPEAT_TYPE_OPTIONS: RepeatType[] = ["none", "daily", "weekly"];
 export const SNOOZE_OPTIONS = [5, 15, 30, 60] as const;
 

@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 pub mod priority;
 pub mod reminder;
 pub mod status;
 pub mod todo;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum HomeShape {
     Ball,
     Panel,
@@ -20,6 +22,7 @@ impl HomeShape {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "ball" => Some(Self::Ball),
@@ -30,8 +33,9 @@ impl HomeShape {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum DockEdge {
     Left,
     Right,
@@ -45,6 +49,7 @@ impl DockEdge {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "left" => Some(Self::Left),
@@ -55,15 +60,17 @@ impl DockEdge {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum CompanionVisibility {
     Shown,
     Hidden,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum CompanionPlacement {
     Free,
     Docked,
@@ -77,6 +84,7 @@ impl CompanionPlacement {
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "free" | "ball" | "panel" => Some(Self::Free),
@@ -86,41 +94,47 @@ impl CompanionPlacement {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum PanelMode {
     Closed,
     Preview,
     Pinned,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum ChromeKind {
     Ball,
     Strip,
     Hidden,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum BodyView {
     TodoMini,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum CompanionSurface {
     Chrome,
     Body,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct SettingsDto {
     pub notification_enabled: bool,
     pub list_default_sort: String,
     pub float_always_on_top: bool,
+    #[ts(type = "number")]
     pub float_visible_count: u32,
     pub float_auto_show: bool,
     pub float_default_mode: HomeShape,
@@ -128,8 +142,9 @@ pub struct SettingsDto {
     pub autostart_enabled: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct UpdateSettingsDto {
     #[serde(default)]
     pub notification_enabled: Option<bool>,
@@ -158,15 +173,17 @@ pub struct WindowBounds {
     pub height: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct CompanionDragEndResult {
     pub still_dragging: bool,
     pub session: CompanionSession,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
 pub struct CompanionSession {
     pub visibility: CompanionVisibility,
     pub placement: CompanionPlacement,
@@ -174,11 +191,15 @@ pub struct CompanionSession {
     pub panel_mode: PanelMode,
     pub chrome: ChromeKind,
     pub dock_edge: DockEdge,
+    #[ts(type = "number")]
     pub dock_y: f64,
     pub body_view: BodyView,
     pub hover_preview: bool,
+    #[ts(type = "number")]
     pub active_count: u64,
+    #[ts(type = "number")]
     pub overdue_count: u64,
+    #[ts(type = "number")]
     pub due_today_count: u64,
 }
 
@@ -211,3 +232,70 @@ pub fn panel_visible(placement: CompanionPlacement, panel_mode: PanelMode) -> bo
         CompanionPlacement::Docked => panel_mode != PanelMode::Closed,
     }
 }
+
+/// 导出前端共享类型（供 `cargo run --bin export-ts` 调用）
+pub fn export_all_ts(out_dir: &std::path::Path) {
+    use ts_rs::TS;
+
+    std::fs::create_dir_all(out_dir).expect("create TS export dir");
+    // SAFETY: 仅导出工具进程设置；不影响运行时应用
+    std::env::set_var("TS_RS_EXPORT_DIR", out_dir);
+
+    crate::domain::todo::TodoDto::export_all().expect("export TodoDto");
+    crate::domain::todo::CreateTodoDto::export_all().expect("export CreateTodoDto");
+    crate::domain::todo::UpdateTodoDto::export_all().expect("export UpdateTodoDto");
+    crate::domain::todo::ListTodoQuery::export_all().expect("export ListTodoQuery");
+    crate::domain::todo::ListWorkbenchQuery::export_all().expect("export ListWorkbenchQuery");
+    crate::domain::todo::PaginatedTodos::export_all().expect("export PaginatedTodos");
+    crate::domain::reminder::ReminderDto::export_all().expect("export ReminderDto");
+    crate::domain::reminder::CreateReminderDto::export_all().expect("export CreateReminderDto");
+    crate::domain::reminder::UpdateReminderDto::export_all().expect("export UpdateReminderDto");
+    crate::domain::status::StatusActionDto::export_all().expect("export StatusActionDto");
+    SettingsDto::export_all().expect("export SettingsDto");
+    UpdateSettingsDto::export_all().expect("export UpdateSettingsDto");
+    CompanionSession::export_all().expect("export CompanionSession");
+    CompanionDragEndResult::export_all().expect("export CompanionDragEndResult");
+    CompanionSurface::export_all().expect("export CompanionSurface");
+    crate::events::EventDto::export_all().expect("export EventDto");
+    crate::events::ListEventsQuery::export_all().expect("export ListEventsQuery");
+
+    write_generated_index(out_dir);
+}
+
+fn write_generated_index(out_dir: &std::path::Path) {
+    let index = r#"/* eslint-disable */
+/**
+ * 由 `cargo run --bin export-ts` 从 Rust domain 生成。请勿手改具体类型文件；可改本 index 聚合。
+ */
+export type { TodoDto } from "./TodoDto";
+export type { CreateTodoDto } from "./CreateTodoDto";
+export type { UpdateTodoDto } from "./UpdateTodoDto";
+export type { ListTodoQuery } from "./ListTodoQuery";
+export type { ListWorkbenchQuery } from "./ListWorkbenchQuery";
+export type { WorkbenchView } from "./WorkbenchView";
+export type { PaginatedTodos } from "./PaginatedTodos";
+export type { TodoStatus } from "./TodoStatus";
+export type { Priority } from "./Priority";
+export type { ReminderDto } from "./ReminderDto";
+export type { CreateReminderDto } from "./CreateReminderDto";
+export type { UpdateReminderDto } from "./UpdateReminderDto";
+export type { RepeatType } from "./RepeatType";
+export type { StatusActionDto } from "./StatusActionDto";
+export type { SettingsDto } from "./SettingsDto";
+export type { UpdateSettingsDto } from "./UpdateSettingsDto";
+export type { CompanionSession } from "./CompanionSession";
+export type { CompanionDragEndResult } from "./CompanionDragEndResult";
+export type { HomeShape } from "./HomeShape";
+export type { DockEdge } from "./DockEdge";
+export type { CompanionVisibility } from "./CompanionVisibility";
+export type { CompanionPlacement } from "./CompanionPlacement";
+export type { PanelMode } from "./PanelMode";
+export type { ChromeKind } from "./ChromeKind";
+export type { BodyView } from "./BodyView";
+export type { CompanionSurface } from "./CompanionSurface";
+export type { EventDto } from "./EventDto";
+export type { ListEventsQuery } from "./ListEventsQuery";
+"#;
+    std::fs::write(out_dir.join("index.ts"), index).expect("write generated index");
+}
+

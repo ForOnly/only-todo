@@ -4,9 +4,8 @@
 
 ## 文档
 
-- [TODO 项目需求说明.md](TODO%20项目需求说明.md) — 项目入口
-- [doc/产品需求.md](doc/产品需求.md) — 产品规格
-- [doc/技术设计.md](doc/技术设计.md) — 技术设计
+- [doc/产品需求.md](doc/产品需求.md) — 产品规格（WHAT）
+- [doc/技术设计.md](doc/技术设计.md) — 技术设计（HOW）
 - [doc/项目进度.md](doc/项目进度.md) — 开发进度
 
 ## 运行环境
@@ -33,6 +32,9 @@ mise run install
 ```bash
 mise run dev           # 开发
 mise run check         # Rust 编译检查
+mise run clippy        # Rust clippy
+mise run lint          # ESLint
+mise run gen-types     # 从 Rust 导出 TS 类型
 mise run format        # Prettier 格式化前端
 mise run format-check  # Prettier 检查前端格式
 mise run build         # 构建生产包

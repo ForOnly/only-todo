@@ -54,13 +54,14 @@ const viewTitle = computed(() => {
   return titles[props.view];
 });
 
-function emptyCopy(): { title: string; hint: string; cta?: "create" | "all" } {
+function emptyCopy(): { title: string; hint: string; cta?: "create" | "all"; ctaLabel?: string } {
   switch (props.view) {
     case "today":
       return {
         title: "今天还没有任务",
         hint: "添加一条今日任务，或从全部中挑选。今日列表最多展示 200 条合并结果。",
         cta: "create",
+        ctaLabel: "添加今日任务",
       };
     case "overdue":
       return { title: "没有逾期任务", hint: "保持这个状态就很好。", cta: "all" };
@@ -73,7 +74,12 @@ function emptyCopy(): { title: string; hint: string; cta?: "create" | "all" } {
     case "done":
       return { title: "还没有完成记录", hint: "完成任务后会出现在这里。" };
     default:
-      return { title: "暂无任务", hint: "按 n 或点新建开始。", cta: "create" };
+      return {
+        title: "暂无任务",
+        hint: "按 n 或点新建开始。",
+        cta: "create",
+        ctaLabel: "添加任务",
+      };
   }
 }
 
@@ -124,7 +130,7 @@ function onCheck(todo: TodoDto, event: Event) {
             variant="primary"
             @click="emit('emptyAction', 'create')"
           >
-            添加今日任务
+            {{ emptyCopy().ctaLabel ?? "添加任务" }}
           </AppButton>
           <AppButton v-else variant="ghost" @click="emit('emptyAction', 'all')">
             查看全部

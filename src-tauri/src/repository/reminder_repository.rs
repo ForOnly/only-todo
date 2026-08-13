@@ -41,6 +41,47 @@ impl ReminderRepository {
         })
     }
 
+    /// 回收站恢复后重开提醒：未来的一次性/周期直接启用；已过期周期跳到下一槽；已过期一次性保持关闭。
+    pub fn reenable_after_restore(db: &Database, todo_id: &str) -> Result<(), AppError> {
+        let reminders = Self::list_by_todo(db, todo_id)?;
+        let now = Utc::now();
+        for reminder in reminders {
+            if reminder.enabled {
+                continue;
+            }
+            match reminder.repeat_type {
+                RepeatType::None => {
+                    if reminder.next_trigger_at > now {
+                        Self::set_enabled(db, &reminder.id, true)?;
+                    }
+                }
+                RepeatType::Daily | RepeatType::Weekly => {
+                    if reminder.next_trigger_at > now {
+                        Self::set_enabled(db, &reminder.id, true)?;
+                    } else {
+                        // 在 trash 期间错过的周期槽：推进到未来并启用（不写 triggered 审计）
+                        Self::advance(db, &reminder)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn set_enabled(db: &Database, id: &str, enabled: bool) -> Result<(), AppError> {
+        let updated_at = Utc::now().to_rfc3339();
+        db.with_conn(|conn| {
+            conn.execute(
+                "UPDATE reminders SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
+                params![enabled as i32, updated_at, id],
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+            Ok(())
+        })
+    }
+
     pub fn create(
         db: &Database,
         dto: &CreateReminderDto,

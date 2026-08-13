@@ -11,6 +11,8 @@ export const TAURI_EVENTS = {
   OPEN_SETTINGS: "open-settings",
   /** 设置已更新 — 伴侣刷新可见条数等 */
   SETTINGS_UPDATED: "settings-updated",
+  /** 任务/提醒写成功 — 主窗与伴侣刷新列表与计数 */
+  TODOS_CHANGED: "todos-changed",
   /** 伴侣会话变更 */
   FLOAT_SESSION_CHANGED: "float-session-changed",
 } as const;

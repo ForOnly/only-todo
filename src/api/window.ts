@@ -17,16 +17,6 @@ export async function hideFloatingWindow(): Promise<void> {
   return invoke("hide_floating_window");
 }
 
-/** Tauri Command: toggle_floating_window */
-export async function toggleFloatingWindow(): Promise<void> {
-  return invoke("toggle_floating_window");
-}
-
-/** Tauri Command: get_active_todo_count */
-export async function getActiveTodoCount(): Promise<number> {
-  return invoke("get_active_todo_count");
-}
-
 /** Tauri Command: get_companion_session（只读快照，不广播） */
 export async function getCompanionSession(): Promise<CompanionSession> {
   return invoke("get_companion_session");

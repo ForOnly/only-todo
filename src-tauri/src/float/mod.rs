@@ -1,9 +1,12 @@
 pub mod geometry;
-pub mod host;
 pub mod surfaces;
+pub mod session;
+pub mod persistence;
+pub mod window_ops;
+pub mod host;
 
-pub use host::{snapshot, FloatHost};
-
+pub use host::FloatHost;
+pub use session::snapshot;
 use tauri::Manager;
 
 use crate::services::todo_service::TodoService;
@@ -18,7 +21,7 @@ pub fn start_chrome_hit_test(app: &tauri::AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(32));
-        let _ = host::update_chrome_click_through(&app);
+        let _ = window_ops::update_chrome_click_through(&app);
     });
 }
 

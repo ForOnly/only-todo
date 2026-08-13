@@ -36,6 +36,13 @@ export function toLocalDatetimeInput(value: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** 今日截止用的 datetime-local（本地日末），保证落在「今日」视图区间内 */
+export function localTodayDueInput(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T23:59`;
+}
+
 export function fromLocalDatetimeInput(value: string): string | null {
   if (!value.trim()) return null;
   return new Date(value).toISOString();
