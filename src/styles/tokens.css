@@ -40,6 +40,8 @@
   --font-ui: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --focus-ring: 0 0 0 3px var(--color-accent-soft);
   --transition-fast: 0.15s ease;
+  /* 助理 chrome（圆球 / 贴边条）微交互 */
+  --float-motion: 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-theme="dark"] {
@@ -86,7 +88,16 @@ body {
   min-height: 100%;
   font-family: var(--font-ui);
   color: var(--color-text);
+  /* 默认铺底，避免主窗在 data-surface 写入前透底闪烁 */
   background: var(--color-bg);
+}
+
+/* 助理透明窗：chrome / body 强制透明，避免 HWND 浅色方框 */
+html[data-surface="chrome"],
+html[data-surface="chrome"] body,
+html[data-surface="body"],
+html[data-surface="body"] body {
+  background: transparent;
 }
 
 :focus-visible {

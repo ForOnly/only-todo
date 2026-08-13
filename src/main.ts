@@ -14,6 +14,9 @@ import "@/styles/forms.css";
 async function bootstrap() {
   installDesktopGuards();
   const label = getCurrentWindow().label;
+  // 透明窗标记：tokens 对 chrome/body 强制透明；main 保持默认铺底防 FOUC
+  document.documentElement.dataset.surface =
+    label === "float-chrome" ? "chrome" : label === "float-body" ? "body" : "main";
   const root =
     label === "float-chrome" ? FloatChromeApp : label === "float-body" ? FloatBodyApp : App;
   const app = createApp(root);

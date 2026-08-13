@@ -37,7 +37,7 @@ export async function companionMinimize(): Promise<CompanionSession> {
   return invoke("companion_minimize");
 }
 
-/** Tauri Command: companion_collapse_to_strip */
+/** Tauri Command: companion_collapse_to_strip（历史名；矩阵：回球或收条） */
 export async function companionCollapseToStrip(): Promise<CompanionSession> {
   return invoke("companion_collapse_to_strip");
 }

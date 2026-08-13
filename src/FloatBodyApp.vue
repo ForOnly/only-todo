@@ -48,6 +48,14 @@ const { startDrag, onPointerUp } = useCompanionDrag("body");
 const isDocked = computed(() => session.value?.placement === "docked");
 const activeCount = computed(() => session.value?.activeCount ?? 0);
 const isPreview = computed(() => session.value?.panelMode === "preview");
+/** × 提示：圆球家临时板「回球」，其余「收成条」 */
+const collapseLabel = computed(() => {
+  const current = session.value;
+  if (current?.placement === "free" && current.homeShape === "ball") {
+    return t("companion.backToBall");
+  }
+  return t("companion.collapseToStrip");
+});
 
 let unlistenSession: (() => void) | null = null;
 let unlistenSettings: (() => void) | null = null;
@@ -173,12 +181,12 @@ async function minimize() {
   }
 }
 
-async function collapseToStrip() {
+async function collapsePanel() {
   closeDetail();
   try {
     applySession(await companionCollapseToStrip());
   } catch (err) {
-    console.error("collapseToStrip failed", err);
+    console.error("collapsePanel failed", err);
     error.value = formatErrorMessage(err);
   }
 }
@@ -396,9 +404,9 @@ onUnmounted(() => {
         <button
           type="button"
           class="icon-btn"
-          :title="$t('companion.collapseToStrip')"
-          :aria-label="$t('companion.collapseToStrip')"
-          @click.stop="collapseToStrip"
+          :title="collapseLabel"
+          :aria-label="collapseLabel"
+          @click.stop="collapsePanel"
         >
           ×
         </button>

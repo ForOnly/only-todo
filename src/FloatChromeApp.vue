@@ -98,23 +98,27 @@ onUnmounted(() => {
 
 <template>
   <div class="chrome-root">
-    <FloatBall
-      v-if="session?.chrome === 'ball'"
-      :active-count="session.activeCount"
-      :overdue-count="session.overdueCount"
-      @click="onClick"
-      @drag-start="startDrag"
-    />
-    <FloatDockStrip
-      v-else-if="session?.chrome === 'strip'"
-      :edge="session.dockEdge"
-      :active-count="session.activeCount"
-      :overdue-count="session.overdueCount"
-      @click="onClick"
-      @drag-start="startDrag"
-      @enter="onEnter"
-      @leave="onLeave"
-    />
+    <Transition name="float-chrome" mode="out-in">
+      <FloatBall
+        v-if="session?.chrome === 'ball'"
+        key="ball"
+        :active-count="session.activeCount"
+        :overdue-count="session.overdueCount"
+        @click="onClick"
+        @drag-start="startDrag"
+      />
+      <FloatDockStrip
+        v-else-if="session?.chrome === 'strip'"
+        key="strip"
+        :edge="session.dockEdge"
+        :active-count="session.activeCount"
+        :overdue-count="session.overdueCount"
+        @click="onClick"
+        @drag-start="startDrag"
+        @enter="onEnter"
+        @leave="onLeave"
+      />
+    </Transition>
 
     <AppShellOverlays />
   </div>
@@ -136,5 +140,25 @@ body,
   width: 100%;
   height: 100vh;
   background: transparent;
+}
+
+.float-chrome-enter-active,
+.float-chrome-leave-active {
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.float-chrome-enter-from,
+.float-chrome-leave-to {
+  opacity: 0;
+  transform: scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-chrome-enter-active,
+  .float-chrome-leave-active {
+    transition: none;
+  }
 }
 </style>

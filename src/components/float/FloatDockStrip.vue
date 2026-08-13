@@ -29,7 +29,7 @@ let moved = false;
 const urgencyClass = computed(() => {
   if (props.overdueCount > 0) return "urgency-overdue";
   if (props.activeCount > 0) return "urgency-active";
-  return "";
+  return "urgency-idle";
 });
 
 const badge = computed(() => {
@@ -112,7 +112,9 @@ function onPointerCancel(event: PointerEvent) {
     @mouseleave="emit('leave')"
   >
     <span class="dock-strip-bar">
-      <span v-if="badge" class="count">{{ badge }}</span>
+      <Transition name="dock-badge">
+        <span v-if="badge" class="count">{{ badge }}</span>
+      </Transition>
     </span>
   </div>
 </template>
@@ -127,6 +129,12 @@ function onPointerCancel(event: PointerEvent) {
   user-select: none;
   touch-action: none;
   background: transparent;
+  outline: none;
+}
+
+.dock-strip:focus,
+.dock-strip:focus-visible {
+  outline: none;
 }
 
 .dock-strip:active {
@@ -141,57 +149,140 @@ function onPointerCancel(event: PointerEvent) {
   justify-content: flex-end;
 }
 
+/* 表面手柄 + 朝屏幕内侧的 accent 脊；无外扩 shadow */
 .dock-strip-bar {
+  --strip-fill: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  --spine-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --badge-fill: var(--color-accent);
+  --badge-fg: var(--color-on-accent);
+
   width: 16px;
   height: 48px;
   flex: 0 0 16px;
-  background: var(--color-accent);
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
+  background: var(--strip-fill);
   transition:
-    filter 0.18s ease,
-    transform 0.18s ease,
-    background-color 0.2s ease;
-}
-
-.dock-strip:hover .dock-strip-bar {
-  filter: brightness(1.08);
+    transform var(--float-motion, 220ms cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color 0.22s ease,
+    box-shadow var(--float-motion, 220ms cubic-bezier(0.22, 1, 0.36, 1));
+  will-change: transform;
 }
 
 .edge-left .dock-strip-bar {
   border-radius: 0 10px 10px 0;
+  box-shadow:
+    inset -2px 0 0 var(--spine-color),
+    inset 0 1px 0 color-mix(in srgb, var(--color-surface) 45%, transparent);
 }
 
 .edge-right .dock-strip-bar {
   border-radius: 10px 0 0 10px;
+  box-shadow:
+    inset 2px 0 0 var(--spine-color),
+    inset 0 1px 0 color-mix(in srgb, var(--color-surface) 45%, transparent);
 }
 
+/* 空闲：淡脊 + 竖点可拖暗示 */
+.urgency-idle .dock-strip-bar {
+  --strip-fill: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  --spine-color: color-mix(in srgb, var(--color-accent) 38%, transparent);
+}
+
+.urgency-idle .dock-strip-bar::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-accent) 40%, transparent) 0 2px,
+    transparent 2px 5px
+  );
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* 有待办：实色脊 + 角标 */
 .urgency-active .dock-strip-bar {
-  background: var(--color-accent);
+  --strip-fill: color-mix(in srgb, var(--color-accent-soft) 50%, var(--color-surface));
+  --spine-color: var(--color-accent);
+  --badge-fill: var(--color-accent);
+  --badge-fg: var(--color-on-accent);
 }
 
+/* 逾期：urgent 脊呼吸 + 角标 */
 .urgency-overdue .dock-strip-bar {
-  background: var(--color-priority-urgent);
+  --strip-fill: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  --spine-color: var(--color-priority-urgent);
+  --badge-fill: var(--color-priority-urgent);
+  --badge-fg: var(--color-on-accent);
 }
 
+.edge-left.urgency-overdue .dock-strip-bar::before,
+.edge-right.urgency-overdue .dock-strip-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: float-strip-pulse 2.4s ease-in-out infinite;
+}
+
+.edge-left.urgency-overdue .dock-strip-bar::before {
+  box-shadow: inset -2px 0 0 color-mix(in srgb, var(--color-priority-urgent) 75%, transparent);
+}
+
+.edge-right.urgency-overdue .dock-strip-bar::before {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-priority-urgent) 75%, transparent);
+}
+
+.dock-strip:focus-visible .dock-strip-bar {
+  --spine-color: color-mix(in srgb, var(--spine-color) 80%, var(--color-text));
+}
+
+/* 向屏幕内侧轻 nudge */
+.edge-left.dock-strip:hover .dock-strip-bar {
+  transform: translateX(2px);
+}
+
+.edge-right.dock-strip:hover .dock-strip-bar {
+  transform: translateX(-2px);
+}
+
+.edge-left.dock-strip:active .dock-strip-bar {
+  transform: translateX(1px) scale(0.96);
+}
+
+.edge-right.dock-strip:active .dock-strip-bar {
+  transform: translateX(-1px) scale(0.96);
+}
+
+/* 与圆球同款实色 pill 角标 */
 .count {
   position: absolute;
+  z-index: 1;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: var(--badge-fill);
+  color: var(--badge-fg);
   font-size: 10px;
   font-weight: 700;
-  line-height: 16px;
+  line-height: 18px;
   text-align: center;
   font-family: var(--font-ui);
-  box-shadow: var(--shadow-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-surface) 35%, transparent);
+  pointer-events: none;
 }
 
 .edge-left .count {
@@ -200,5 +291,52 @@ function onPointerCancel(event: PointerEvent) {
 
 .edge-right .count {
   right: 10px;
+}
+
+.dock-badge-enter-active,
+.dock-badge-leave-active {
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dock-badge-enter-from,
+.dock-badge-leave-to {
+  opacity: 0;
+  transform: scale(0.75);
+}
+
+@keyframes float-strip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-strip-bar {
+    transition-duration: 0.01ms;
+  }
+
+  .edge-left.urgency-overdue .dock-strip-bar::before,
+  .edge-right.urgency-overdue .dock-strip-bar::before {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .edge-left.dock-strip:hover .dock-strip-bar,
+  .edge-right.dock-strip:hover .dock-strip-bar,
+  .edge-left.dock-strip:active .dock-strip-bar,
+  .edge-right.dock-strip:active .dock-strip-bar {
+    transform: none;
+  }
+
+  .dock-badge-enter-active,
+  .dock-badge-leave-active {
+    transition: none;
+  }
 }
 </style>

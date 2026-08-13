@@ -150,11 +150,30 @@ impl FloatHost {
             }
             CompanionPlacement::Free => match home {
                 HomeShape::Ball => {
-                    persist_body_size_only(app).ok();
-                    let host = host_state(app)?;
-                    let mut rt = lock_runtime(&host)?;
-                    rt.panel_mode = PanelMode::Closed;
-                    rt.temp_body_bounds = None;
+                    close_ball_temp_panel(app)?;
+                }
+                // 面板家自由态：Esc 不收条（× 才收条）；详情由前端先关，无需 apply
+                HomeShape::Panel => return snapshot(app),
+            },
+        }
+        apply_and_emit(app)
+    }
+
+    /// 面板 ×（命令名历史遗留）：贴边收条；圆球家临时板回球；面板家自由态收条
+    pub fn collapse_to_strip(app: &AppHandle) -> Result<CompanionSession, AppError> {
+        cancel_cluster_timers(app);
+        let state = app_state(app)?;
+        let db = &state.db;
+        let placement = SettingsRepository::get_placement(db)?;
+        let home = SettingsRepository::get_home_shape(db)?;
+        match placement {
+            CompanionPlacement::Docked => {
+                let host = host_state(app)?;
+                lock_runtime(&host)?.panel_mode = PanelMode::Closed;
+            }
+            CompanionPlacement::Free => match home {
+                HomeShape::Ball => {
+                    close_ball_temp_panel(app)?;
                 }
                 HomeShape::Panel => {
                     persist_body_bounds(app).ok();
@@ -163,32 +182,9 @@ impl FloatHost {
                     let mut rt = lock_runtime(&host)?;
                     rt.visibility = CompanionVisibility::Shown;
                     rt.panel_mode = PanelMode::Closed;
+                    rt.temp_body_bounds = None;
                 }
             },
-        }
-        apply_and_emit(app)
-    }
-
-    /// 面板 ×：一律收成贴边条（含圆球家临时板，不回球、不进托盘）
-    pub fn collapse_to_strip(app: &AppHandle) -> Result<CompanionSession, AppError> {
-        cancel_cluster_timers(app);
-        let state = app_state(app)?;
-        let db = &state.db;
-        let placement = SettingsRepository::get_placement(db)?;
-        match placement {
-            CompanionPlacement::Docked => {
-                let host = host_state(app)?;
-                lock_runtime(&host)?.panel_mode = PanelMode::Closed;
-            }
-            CompanionPlacement::Free => {
-                persist_body_bounds(app).ok();
-                dock_from_body_minimize(app)?;
-                let host = host_state(app)?;
-                let mut rt = lock_runtime(&host)?;
-                rt.visibility = CompanionVisibility::Shown;
-                rt.panel_mode = PanelMode::Closed;
-                rt.temp_body_bounds = None;
-            }
         }
         apply_and_emit(app)
     }
@@ -452,6 +448,16 @@ fn schedule_unpreview(app: AppHandle) {
         }
         let _ = apply_and_emit(&app);
     });
+}
+
+/// 圆球家临时板收起 → 回球（Esc / × 共用）
+fn close_ball_temp_panel(app: &AppHandle) -> Result<(), AppError> {
+    persist_body_size_only(app).ok();
+    let host = host_state(app)?;
+    let mut rt = lock_runtime(&host)?;
+    rt.panel_mode = PanelMode::Closed;
+    rt.temp_body_bounds = None;
+    Ok(())
 }
 
 fn dock_from_body_minimize(app: &AppHandle) -> Result<(), AppError> {
