@@ -21,6 +21,7 @@ import type { EventDto } from "@/api/types";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
 import CreateTodoModal from "@/components/todo/CreateTodoModal.vue";
+import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
 import ViewSidebar from "@/components/workbench/ViewSidebar.vue";
 import TaskListPane from "@/components/workbench/TaskListPane.vue";
 import TaskInspector from "@/components/workbench/TaskInspector.vue";
@@ -32,7 +33,6 @@ import { dueDateRangeForFilter, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 import {
   formatRelativeTime,
-  translateEntityType,
   translateEventType,
 } from "@/utils/i18nFormat";
 import { parseListDefaultSort } from "@/utils/listSort";
@@ -596,10 +596,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       <ul v-show="!activityCollapsed" class="activity-list">
         <li v-for="ev in recentEvents" :key="ev.id" class="activity-item">
           <span class="activity-type">{{ translateEventType(ev.eventType, t) }}</span>
-          <span class="activity-meta">
-            {{ translateEntityType(ev.entityType, t) }} ·
-            {{ formatRelativeTime(ev.createdAt, t) }}
-          </span>
+          <span class="activity-meta">{{ formatRelativeTime(ev.createdAt, t) }}</span>
         </li>
       </ul>
     </aside>
@@ -633,6 +630,8 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       @close="settingsOpen = false"
       @update="handleSettingsUpdate"
     />
+
+    <AppShellOverlays confirm />
   </div>
 </template>
 

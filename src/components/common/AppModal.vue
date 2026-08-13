@@ -76,6 +76,9 @@ onUnmounted(() => {
   border-radius: var(--radius-lg);
   min-width: 400px;
   max-width: 90vw;
+  max-height: min(90vh, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-md);
   overflow: hidden;
   color: var(--color-text);
@@ -86,14 +89,6 @@ onUnmounted(() => {
   max-width: calc(100vw - 24px);
   width: calc(100% - 24px);
   max-height: calc(100vh - 24px);
-  display: flex;
-  flex-direction: column;
-}
-
-.modal.compact .modal-body {
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
 }
 
 .modal-header {
@@ -102,6 +97,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 .modal-header h2 {
@@ -128,5 +124,8 @@ onUnmounted(() => {
 
 .modal-body {
   padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 </style>

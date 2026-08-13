@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import type { SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
 import { formatDueDate, isOverdue } from "@/utils/date";
 import { sortKeysForView } from "@/utils/listSort";
@@ -33,6 +34,15 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const sortOptions = computed(() => sortKeysForView(props.view));
+
+const sortSelectOptions = computed(() =>
+  sortOptions.value.map((key) => ({ value: key, label: t(`sort.${key}`) })),
+);
+
+const sortByModel = computed({
+  get: () => props.sortBy,
+  set: (v: string) => emit("changeSort", v as SortBy),
+});
 
 const viewTitle = computed(() => {
   if (props.view === "tag" && props.activeTag) {
@@ -106,14 +116,7 @@ function onCheck(todo: TodoDto, event: Event) {
       <div class="sort-controls">
         <label class="sort">
           <span>{{ $t("list.sort") }}</span>
-          <select
-            :value="sortBy"
-            @change="emit('changeSort', ($event.target as HTMLSelectElement).value as SortBy)"
-          >
-            <option v-for="key in sortOptions" :key="key" :value="key">
-              {{ $t(`sort.${key}`) }}
-            </option>
-          </select>
+          <AppSelect v-model="sortByModel" :options="sortSelectOptions" />
         </label>
         <button
           type="button"
@@ -248,13 +251,10 @@ function onCheck(todo: TodoDto, event: Event) {
   color: var(--color-muted);
 }
 
-.sort select {
+.sort :deep(.trigger) {
   padding: 4px 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  color: var(--color-text);
-  background: var(--color-surface);
+  font-size: 12px;
+  min-width: 110px;
 }
 
 .sort-order-btn {

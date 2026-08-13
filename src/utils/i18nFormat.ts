@@ -18,14 +18,9 @@ export function formatRelativeTime(
   return t("activity.relativeDays", { n: days });
 }
 
+/** eventType 形如 todo.created → activity.types.todo.created */
 export function translateEventType(eventType: string, t: Composer["t"]): string {
-  const key = `activity.types.${eventType}` as const;
+  const key = `activity.types.${eventType}`;
   const translated = t(key);
   return translated === key ? eventType : translated;
-}
-
-export function translateEntityType(entityType: string, t: Composer["t"]): string {
-  if (entityType === "todo") return t("activity.entityTodo");
-  if (entityType === "reminder") return t("activity.entityReminder");
-  return entityType;
 }

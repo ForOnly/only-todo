@@ -3,7 +3,9 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
+import AppDateTimePicker from "@/components/common/AppDateTimePicker.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import {
   PRIORITY_OPTIONS,
   REPEAT_TYPE_OPTIONS,
@@ -63,6 +65,34 @@ const statusRef = computed(() =>
   props.detail && !isDeleted.value ? props.detail.status : null,
 );
 const { actions } = useStatusActions(statusRef);
+
+const priorityOptions = computed(() =>
+  PRIORITY_OPTIONS.map((p) => ({ value: p, label: t(`priority.${p}`) })),
+);
+const repeatOptions = computed(() =>
+  REPEAT_TYPE_OPTIONS.map((rt) => ({ value: rt, label: t(`repeat.${rt}`) })),
+);
+const snoozeOptions = computed(() =>
+  SNOOZE_OPTIONS.map((m) => ({
+    value: String(m),
+    label: t("inspector.snoozeMinutes", { n: m }),
+  })),
+);
+
+const priorityModel = computed({
+  get: () => props.editPriority,
+  set: (v: string) => {
+    emit("update:editPriority", v as TodoDto["priority"]);
+    onField();
+  },
+});
+const dueModel = computed({
+  get: () => props.editDueDate,
+  set: (v: string) => {
+    emit("update:editDueDate", v);
+    onField();
+  },
+});
 
 const autosaveLabel = computed(() => {
   switch (props.saveStatus) {
@@ -138,6 +168,11 @@ function commitEditReminder() {
 function cancelEditReminder() {
   editingReminderId.value = null;
   editingReminderAt.value = "";
+}
+
+function onSnooze(reminderId: string, value: string) {
+  if (!value) return;
+  emit("snoozeReminder", reminderId, Number(value));
 }
 </script>
 
@@ -234,32 +269,12 @@ function cancelEditReminder() {
 
           <label class="app-field">
             <span>{{ $t("inspector.priority") }}</span>
-            <select
-              :value="editPriority"
-              @change="
-                emit(
-                  'update:editPriority',
-                  ($event.target as HTMLSelectElement).value as TodoDto['priority'],
-                );
-                onField();
-              "
-            >
-              <option v-for="p in PRIORITY_OPTIONS" :key="p" :value="p">
-                {{ $t(`priority.${p}`) }}
-              </option>
-            </select>
+            <AppSelect v-model="priorityModel" :options="priorityOptions" />
           </label>
 
           <label class="app-field">
             <span>{{ $t("inspector.dueDate") }}</span>
-            <input
-              type="datetime-local"
-              :value="editDueDate"
-              @input="
-                emit('update:editDueDate', ($event.target as HTMLInputElement).value);
-                onField();
-              "
-            />
+            <AppDateTimePicker v-model="dueModel" />
           </label>
 
           <div class="app-field">
@@ -303,7 +318,7 @@ function cancelEditReminder() {
             <ul v-else class="reminder-list">
               <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
                 <template v-if="editingReminderId === reminder.id">
-                  <input v-model="editingReminderAt" type="datetime-local" />
+                  <AppDateTimePicker v-model="editingReminderAt" :clearable="false" />
                   <div class="reminder-actions">
                     <AppButton variant="primary" @click="commitEditReminder">
                       {{ $t("common.save") }}
@@ -334,23 +349,14 @@ function cancelEditReminder() {
                     >
                       {{ $t("inspector.reschedule") }}
                     </AppButton>
-                    <select
+                    <AppSelect
                       class="snooze"
+                      model-value=""
+                      :options="snoozeOptions"
+                      :placeholder="$t('inspector.snooze')"
                       :disabled="!reminder.enabled"
-                      @change="
-                        emit(
-                          'snoozeReminder',
-                          reminder.id,
-                          Number(($event.target as HTMLSelectElement).value),
-                        );
-                        ($event.target as HTMLSelectElement).value = '';
-                      "
-                    >
-                      <option value="" disabled selected>{{ $t("inspector.snooze") }}</option>
-                      <option v-for="m in SNOOZE_OPTIONS" :key="m" :value="m">
-                        {{ $t("inspector.snoozeMinutes", { n: m }) }}
-                      </option>
-                    </select>
+                      @update:model-value="onSnooze(reminder.id, $event)"
+                    />
                     <AppButton variant="danger" @click="emit('removeReminder', reminder.id)">
                       {{ $t("inspector.deleteShort") }}
                     </AppButton>
@@ -361,12 +367,8 @@ function cancelEditReminder() {
             </ul>
 
             <div class="add-reminder">
-              <input v-model="reminderInput" type="datetime-local" />
-              <select v-model="repeatType">
-                <option v-for="rt in REPEAT_TYPE_OPTIONS" :key="rt" :value="rt">
-                  {{ $t(`repeat.${rt}`) }}
-                </option>
-              </select>
+              <AppDateTimePicker v-model="reminderInput" :clearable="false" />
+              <AppSelect v-model="repeatType" :options="repeatOptions" />
               <AppButton variant="primary" @click="submitReminder">{{ $t("common.add") }}</AppButton>
             </div>
           </section>
@@ -559,13 +561,12 @@ function cancelEditReminder() {
 }
 
 .snooze {
+  min-width: 100px;
+}
+
+.snooze :deep(.trigger) {
   padding: 6px 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  font: inherit;
   font-size: 13px;
-  color: var(--color-text);
-  background: var(--color-surface);
 }
 
 .add-reminder {

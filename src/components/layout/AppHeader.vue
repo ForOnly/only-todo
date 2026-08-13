@@ -20,7 +20,7 @@ const emit = defineEmits<{
       <input
         id="workbench-search"
         class="search"
-        type="search"
+        type="text"
         :placeholder="$t('header.searchPlaceholder')"
         :value="keyword"
         @input="emit('update:keyword', ($event.target as HTMLInputElement).value)"

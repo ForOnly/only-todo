@@ -7,10 +7,12 @@ import FloatChromeApp from "@/FloatChromeApp.vue";
 import { getSettings } from "@/api/settings";
 import { createAppI18n } from "@/i18n";
 import { applyAppearance } from "@/utils/appearance";
+import { installDesktopGuards } from "@/utils/desktopGuards";
 import "@/styles/tokens.css";
 import "@/styles/forms.css";
 
 async function bootstrap() {
+  installDesktopGuards();
   const label = getCurrentWindow().label;
   const root =
     label === "float-chrome" ? FloatChromeApp : label === "float-body" ? FloatBodyApp : App;

@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 import type { CreateTodoDto, CreateTodoFormModel } from "@/api/types";
 import { DEFAULT_CREATE_TODO_FORM, PRIORITY_OPTIONS } from "@/api/types";
 import { fromLocalDatetimeInput } from "@/utils/date";
 import { validateCreateTodoForm } from "@/utils/validation";
 import AppButton from "@/components/common/AppButton.vue";
+import AppDateTimePicker from "@/components/common/AppDateTimePicker.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
 import AppModal from "@/components/common/AppModal.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -23,10 +26,15 @@ const emit = defineEmits<{
   submit: [dto: CreateTodoDto];
 }>();
 
+const { t } = useI18n();
 const form = ref<CreateTodoFormModel>(DEFAULT_CREATE_TODO_FORM());
 const error = ref<string | null>(null);
 const submitting = ref(false);
 const titleInput = ref<HTMLInputElement | null>(null);
+
+const priorityOptions = computed(() =>
+  PRIORITY_OPTIONS.map((p) => ({ value: p, label: t(`priority.${p}`) })),
+);
 
 watch(
   () => props.open,
@@ -139,16 +147,21 @@ defineExpose({ resetSubmitting, setError });
 
     <label class="app-field">
       <span>{{ $t("create.priority") }}</span>
-      <select v-model="form.priority">
-        <option v-for="p in PRIORITY_OPTIONS" :key="p" :value="p">
-          {{ $t(`priority.${p}`) }}
-        </option>
-      </select>
+      <AppSelect
+        v-model="form.priority"
+        :options="priorityOptions"
+        :compact="compact"
+        :teleport="teleport !== false"
+      />
     </label>
 
     <label class="app-field">
       <span>{{ $t("create.dueDate") }}</span>
-      <input v-model="form.dueDate" type="datetime-local" />
+      <AppDateTimePicker
+        v-model="form.dueDate"
+        :compact="compact"
+        :teleport="teleport !== false"
+      />
     </label>
 
     <label class="app-field">

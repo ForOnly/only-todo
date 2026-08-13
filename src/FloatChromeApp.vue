@@ -12,6 +12,7 @@ import {
 } from "@/api/window";
 import FloatBall from "@/components/float/FloatBall.vue";
 import FloatDockStrip from "@/components/float/FloatDockStrip.vue";
+import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
 import { TAURI_EVENTS } from "@/constants/events";
 import { applyAppearance } from "@/utils/appearance";
@@ -114,6 +115,8 @@ onUnmounted(() => {
       @enter="onEnter"
       @leave="onLeave"
     />
+
+    <AppShellOverlays />
   </div>
 </template>
 

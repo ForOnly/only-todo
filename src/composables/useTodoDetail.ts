@@ -9,6 +9,7 @@ import * as todoApi from "@/api/todos";
 import type { ReminderDto, RepeatType, TodoDto, TodoStatus, UpdateTodoDto } from "@/api/types";
 import { fromLocalDatetimeInput, toLocalDatetimeInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
+import { confirm } from "@/composables/useAppConfirm";
 import { i18n } from "@/i18n";
 
 const AUTOSAVE_MS = 450;
@@ -351,7 +352,13 @@ export function useTodoDetail(
 
   async function remove(): Promise<boolean> {
     if (!selectedId.value) return false;
-    if (!window.confirm(i18n.global.t("inspector.confirmDelete"))) return false;
+    const ok = await confirm({
+      title: i18n.global.t("common.delete"),
+      message: i18n.global.t("inspector.confirmDelete"),
+      confirmLabel: i18n.global.t("common.delete"),
+      danger: true,
+    });
+    if (!ok) return false;
     const todoId = selectedId.value;
     try {
       await todoApi.deleteTodo(todoId);

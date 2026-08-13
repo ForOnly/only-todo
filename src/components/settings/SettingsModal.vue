@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppModal from "@/components/common/AppModal.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import type {
   FloatDefaultMode,
   SortBy,
@@ -38,6 +40,8 @@ const emit = defineEmits<{
   update: [payload: UpdateSettingsDto];
 }>();
 
+const { t } = useI18n();
+
 const localNotification = ref(props.notificationEnabled);
 const localAlwaysOnTop = ref(props.floatAlwaysOnTop);
 const localVisibleCount = ref(props.floatVisibleCount);
@@ -52,6 +56,34 @@ const localSortOrder = ref<SortOrder>("desc");
 const localDefaultView = ref<WorkbenchView>(
   props.listDefaultView === "tag" ? "today" : props.listDefaultView,
 );
+
+const themeOptions = computed(() => [
+  { value: "system", label: t("settings.themeSystem") },
+  { value: "light", label: t("settings.themeLight") },
+  { value: "dark", label: t("settings.themeDark") },
+]);
+const localeOptions = computed(() => [
+  { value: "zh-CN", label: t("settings.langZh") },
+  { value: "en-US", label: t("settings.langEn") },
+]);
+const viewOptions = computed(() =>
+  DEFAULT_VIEW_OPTIONS.map((id) => ({ value: id, label: t(`views.${id}`) })),
+);
+const sortByOptions = computed(() => [
+  { value: "priority", label: t("sort.priority") },
+  { value: "dueDate", label: t("sort.dueDate") },
+  { value: "updatedAt", label: t("sort.updatedAt") },
+  { value: "createdAt", label: t("sort.createdAt") },
+  { value: "title", label: t("sort.title") },
+]);
+const sortOrderOptions = computed(() => [
+  { value: "desc", label: t("settings.desc") },
+  { value: "asc", label: t("settings.asc") },
+]);
+const shapeOptions = computed(() => [
+  { value: "ball", label: t("settings.ball") },
+  { value: "panel", label: t("settings.panel") },
+]);
 
 watch(
   () => props.open,
@@ -101,18 +133,11 @@ function save() {
       <h3>{{ $t("settings.appearance") }}</h3>
       <label class="setting-row">
         <span>{{ $t("settings.theme") }}</span>
-        <select v-model="localTheme" class="select-input">
-          <option value="system">{{ $t("settings.themeSystem") }}</option>
-          <option value="light">{{ $t("settings.themeLight") }}</option>
-          <option value="dark">{{ $t("settings.themeDark") }}</option>
-        </select>
+        <AppSelect v-model="localTheme" class="select-grow" :options="themeOptions" />
       </label>
       <label class="setting-row">
         <span>{{ $t("settings.language") }}</span>
-        <select v-model="localLocale" class="select-input">
-          <option value="zh-CN">{{ $t("settings.langZh") }}</option>
-          <option value="en-US">{{ $t("settings.langEn") }}</option>
-        </select>
+        <AppSelect v-model="localLocale" class="select-grow" :options="localeOptions" />
       </label>
     </section>
 
@@ -128,29 +153,16 @@ function save() {
       <h3>{{ $t("settings.list") }}</h3>
       <label class="setting-row">
         <span>{{ $t("settings.defaultView") }}</span>
-        <select v-model="localDefaultView" class="select-input">
-          <option v-for="id in DEFAULT_VIEW_OPTIONS" :key="id" :value="id">
-            {{ $t(`views.${id}`) }}
-          </option>
-        </select>
+        <AppSelect v-model="localDefaultView" class="select-grow" :options="viewOptions" />
       </label>
       <p class="hint">{{ $t("settings.defaultViewHint") }}</p>
       <label class="setting-row">
         <span>{{ $t("settings.defaultSort") }}</span>
-        <select v-model="localSortBy" class="select-input">
-          <option value="priority">{{ $t("sort.priority") }}</option>
-          <option value="dueDate">{{ $t("sort.dueDate") }}</option>
-          <option value="updatedAt">{{ $t("sort.updatedAt") }}</option>
-          <option value="createdAt">{{ $t("sort.createdAt") }}</option>
-          <option value="title">{{ $t("sort.title") }}</option>
-        </select>
+        <AppSelect v-model="localSortBy" class="select-grow" :options="sortByOptions" />
       </label>
       <label class="setting-row">
         <span>{{ $t("settings.direction") }}</span>
-        <select v-model="localSortOrder" class="select-input">
-          <option value="desc">{{ $t("settings.desc") }}</option>
-          <option value="asc">{{ $t("settings.asc") }}</option>
-        </select>
+        <AppSelect v-model="localSortOrder" class="select-grow" :options="sortOrderOptions" />
       </label>
       <p class="hint">{{ $t("settings.sortHint") }}</p>
     </section>
@@ -168,10 +180,7 @@ function save() {
       <div class="setting-block">
         <label class="setting-row">
           <span>{{ $t("settings.defaultShape") }}</span>
-          <select v-model="localDefaultMode" class="select-input">
-            <option value="ball">{{ $t("settings.ball") }}</option>
-            <option value="panel">{{ $t("settings.panel") }}</option>
-          </select>
+          <AppSelect v-model="localDefaultMode" class="select-grow" :options="shapeOptions" />
         </label>
         <p class="hint">{{ $t("settings.shapeHint") }}</p>
       </div>
@@ -237,6 +246,12 @@ function save() {
   color: var(--color-text);
 }
 
+.select-grow {
+  flex: 1;
+  min-width: 140px;
+  max-width: 240px;
+}
+
 .hint {
   margin: 0 0 4px;
   padding-left: 0;
@@ -256,15 +271,6 @@ function save() {
   padding: 4px 8px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  color: var(--color-text);
-  background: var(--color-surface);
-}
-
-.select-input {
-  padding: 4px 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
   color: var(--color-text);
   background: var(--color-surface);
 }

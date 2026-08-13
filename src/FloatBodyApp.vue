@@ -17,6 +17,7 @@ import {
 } from "@/api/window";
 import FloatDetailPanel from "@/components/float/FloatDetailPanel.vue";
 import FloatTaskList from "@/components/float/FloatTaskList.vue";
+import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { TAURI_EVENTS } from "@/constants/events";
@@ -519,6 +520,8 @@ onUnmounted(() => {
       @add-reminder="handleAddReminder"
       @remove-reminder="handleRemoveReminder"
     />
+
+    <AppShellOverlays />
   </div>
 </template>
 

@@ -3,7 +3,9 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
+import AppDateTimePicker from "@/components/common/AppDateTimePicker.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
+import AppSelect from "@/components/common/AppSelect.vue";
 import {
   PRIORITY_OPTIONS,
   REPEAT_TYPE_OPTIONS,
@@ -46,6 +48,22 @@ const repeatType = ref<RepeatType>("none");
 const statusRef = computed(() => props.detail.status);
 const { actions } = useStatusActions(statusRef);
 
+const priorityOptions = computed(() =>
+  PRIORITY_OPTIONS.map((p) => ({ value: p, label: t(`priority.${p}`) })),
+);
+const repeatOptions = computed(() =>
+  REPEAT_TYPE_OPTIONS.map((rt) => ({ value: rt, label: t(`repeat.${rt}`) })),
+);
+
+const priorityModel = computed({
+  get: () => props.editPriority,
+  set: (v: string) => emit("update:editPriority", v as TodoDto["priority"]),
+});
+const dueModel = computed({
+  get: () => props.editDueDate,
+  set: (v: string) => emit("update:editDueDate", v),
+});
+
 function submitReminder() {
   if (!reminderInput.value) return;
   emit("addReminder", reminderInput.value, repeatType.value);
@@ -83,28 +101,12 @@ function submitReminder() {
 
     <label class="app-field">
       <span>{{ $t("companion.detailPriority") }}</span>
-      <select
-        :value="editPriority"
-        @change="
-          emit(
-            'update:editPriority',
-            ($event.target as HTMLSelectElement).value as TodoDto['priority'],
-          )
-        "
-      >
-        <option v-for="p in PRIORITY_OPTIONS" :key="p" :value="p">
-          {{ $t(`priority.${p}`) }}
-        </option>
-      </select>
+      <AppSelect v-model="priorityModel" :options="priorityOptions" compact :teleport="false" />
     </label>
 
     <label class="app-field">
       <span>{{ $t("companion.detailDue") }}</span>
-      <input
-        type="datetime-local"
-        :value="editDueDate"
-        @input="emit('update:editDueDate', ($event.target as HTMLInputElement).value)"
-      />
+      <AppDateTimePicker v-model="dueModel" compact :teleport="false" />
     </label>
 
     <div class="status-row">
@@ -125,12 +127,19 @@ function submitReminder() {
       <h3>{{ $t("companion.reminders") }}</h3>
       <AppErrorBanner v-if="remindersError" :message="remindersError" />
       <div class="reminder-form">
-        <input v-model="reminderInput" type="datetime-local" class="datetime-input" />
-        <select v-model="repeatType">
-          <option v-for="rt in REPEAT_TYPE_OPTIONS" :key="rt" :value="rt">
-            {{ $t(`repeat.${rt}`) }}
-          </option>
-        </select>
+        <AppDateTimePicker
+          v-model="reminderInput"
+          class="datetime-input"
+          compact
+          :clearable="false"
+          :teleport="false"
+        />
+        <AppSelect
+          v-model="repeatType"
+          :options="repeatOptions"
+          compact
+          :teleport="false"
+        />
         <AppButton @click="submitReminder">{{ $t("companion.addReminder") }}</AppButton>
       </div>
       <div v-if="remindersLoading" class="hint">{{ $t("companion.loadingReminders") }}</div>
@@ -199,16 +208,12 @@ function submitReminder() {
   gap: 6px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 .datetime-input {
   flex: 1;
   min-width: 140px;
-  padding: 6px 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  background: var(--color-surface);
 }
 
 .reminder-list {
