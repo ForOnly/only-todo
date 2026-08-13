@@ -15,8 +15,6 @@ export default {
   header: {
     searchPlaceholder: "搜索任务…  /",
     newTodo: "+ 新建",
-    openCompanion: "打开助理",
-    openCompanionTitle: "打开或显示桌面助理",
     settings: "设置",
   },
   views: {
@@ -142,6 +140,8 @@ export default {
     notifications: "通知",
     enableNotifications: "启用提醒通知",
     list: "列表",
+    defaultView: "默认归类",
+    defaultViewHint: "仅在打开主窗时生效；保存后不会立刻切换当前侧栏。",
     defaultSort: "默认排序",
     direction: "方向",
     asc: "升序",

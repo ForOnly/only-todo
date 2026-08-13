@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WorkbenchView } from "@/api/types";
+import { FOOTER_WORKBENCH_VIEWS, MAIN_WORKBENCH_VIEWS } from "@/constants/workbenchViews";
 
 const props = defineProps<{
   view: WorkbenchView;
@@ -12,16 +13,6 @@ const emit = defineEmits<{
   selectView: [view: WorkbenchView, tag?: string | null];
 }>();
 
-const primaryViewIds: WorkbenchView[] = [
-  "today",
-  "overdue",
-  "doing",
-  "all",
-  "done",
-  "archived",
-  "trash",
-];
-
 function isActive(id: WorkbenchView): boolean {
   return props.view === id;
 }
@@ -33,9 +24,45 @@ function isTagActive(tag: string): boolean {
 
 <template>
   <aside class="view-sidebar" :aria-label="$t('views.navLabel')">
-    <nav class="nav">
+    <div class="sidebar-scroll">
+      <nav class="nav">
+        <button
+          v-for="id in MAIN_WORKBENCH_VIEWS"
+          :key="id"
+          type="button"
+          class="nav-item"
+          :class="{ active: isActive(id) }"
+          @click="emit('selectView', id)"
+        >
+          <span>{{ $t(`views.${id}`) }}</span>
+          <span
+            v-if="id === 'overdue' && (overdueCount ?? 0) > 0"
+            class="badge"
+            :title="$t('views.overdueBadge', { count: overdueCount })"
+          >
+            {{ overdueCount }}
+          </span>
+        </button>
+      </nav>
+
+      <div v-if="allTags.length" class="tags-block">
+        <h3 class="tags-title">{{ $t("views.tags") }}</h3>
+        <button
+          v-for="tag in allTags"
+          :key="tag"
+          type="button"
+          class="nav-item tag"
+          :class="{ active: isTagActive(tag) }"
+          @click="emit('selectView', 'tag', tag)"
+        >
+          {{ tag }}
+        </button>
+      </div>
+    </div>
+
+    <nav class="nav nav-footer">
       <button
-        v-for="id in primaryViewIds"
+        v-for="id in FOOTER_WORKBENCH_VIEWS"
         :key="id"
         type="button"
         class="nav-item"
@@ -43,29 +70,8 @@ function isTagActive(tag: string): boolean {
         @click="emit('selectView', id)"
       >
         <span>{{ $t(`views.${id}`) }}</span>
-        <span
-          v-if="id === 'overdue' && (overdueCount ?? 0) > 0"
-          class="badge"
-          :title="$t('views.overdueBadge', { count: overdueCount })"
-        >
-          {{ overdueCount }}
-        </span>
       </button>
     </nav>
-
-    <div v-if="allTags.length" class="tags-block">
-      <h3 class="tags-title">{{ $t("views.tags") }}</h3>
-      <button
-        v-for="tag in allTags"
-        :key="tag"
-        type="button"
-        class="nav-item tag"
-        :class="{ active: isTagActive(tag) }"
-        @click="emit('selectView', 'tag', tag)"
-      >
-        {{ tag }}
-      </button>
-    </div>
   </aside>
 </template>
 
@@ -73,16 +79,35 @@ function isTagActive(tag: string): boolean {
 .view-sidebar {
   width: 168px;
   flex-shrink: 0;
+  align-self: stretch;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid var(--color-border);
   background: var(--color-surface-muted);
-  padding: 12px 8px;
+  padding: 12px 8px 0;
+}
+
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.nav-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 12px 0 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .nav-item {

@@ -104,6 +104,41 @@ pub enum WorkbenchView {
     Tag,
 }
 
+impl WorkbenchView {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Today => "today",
+            Self::Overdue => "overdue",
+            Self::Doing => "doing",
+            Self::All => "all",
+            Self::Done => "done",
+            Self::Archived => "archived",
+            Self::Trash => "trash",
+            Self::Tag => "tag",
+        }
+    }
+
+    /// settings `list.default_view`：非法或 tag → Today
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_settings_str(value: &str) -> Self {
+        match value {
+            "overdue" => Self::Overdue,
+            "doing" => Self::Doing,
+            "all" => Self::All,
+            "done" => Self::Done,
+            "archived" => Self::Archived,
+            "trash" => Self::Trash,
+            "today" => Self::Today,
+            _ => Self::Today,
+        }
+    }
+
+    /// 可作为启动默认归类（排除 Tag）
+    pub fn is_default_view_candidate(self) -> bool {
+        !matches!(self, Self::Tag)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, rename_all = "camelCase")]

@@ -15,8 +15,6 @@ export default {
   header: {
     searchPlaceholder: "Search tasks…  /",
     newTodo: "+ New",
-    openCompanion: "Assistant",
-    openCompanionTitle: "Show desktop assistant",
     settings: "Settings",
   },
   views: {
@@ -142,6 +140,8 @@ export default {
     notifications: "Notifications",
     enableNotifications: "Enable reminder notifications",
     list: "List",
+    defaultView: "Default view",
+    defaultViewHint: "Applied when opening the main window; saving does not switch the current sidebar.",
     defaultSort: "Default sort",
     direction: "Order",
     asc: "Ascending",

@@ -4,6 +4,7 @@ use crate::domain::{
     CompanionPlacement, DockEdge, HomeShape, SettingsDto, UiLocale, UiTheme, UpdateSettingsDto,
     WindowBounds,
 };
+use crate::domain::todo::WorkbenchView;
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
@@ -14,6 +15,9 @@ impl SettingsRepository {
         let notification_enabled = Self::get_bool(db, "notification.enabled")?.unwrap_or(true);
         let list_default_sort = Self::get_value(db, "list.default_sort")?
             .unwrap_or_else(|| r#"{"sort_by":"priority","sort_order":"desc"}"#.into());
+        let list_default_view = Self::get_value(db, "list.default_view")?
+            .map(|v| WorkbenchView::from_settings_str(&v))
+            .unwrap_or(WorkbenchView::Today);
         let float_always_on_top = Self::get_bool(db, "companion.always_on_top")?.unwrap_or(true);
         let float_visible_count = Self::get_u32(db, "companion.visible_count")?.unwrap_or(5);
         let float_auto_show = Self::get_bool(db, "companion.auto_show")?.unwrap_or(true);
@@ -30,6 +34,7 @@ impl SettingsRepository {
         Ok(SettingsDto {
             notification_enabled,
             list_default_sort,
+            list_default_view,
             float_always_on_top,
             float_visible_count,
             float_auto_show,
@@ -51,6 +56,15 @@ impl SettingsRepository {
         }
         if let Some(sort) = &dto.list_default_sort {
             Self::set_value(db, "list.default_sort", sort)?;
+        }
+        if let Some(view) = dto.list_default_view {
+            // Tag 等非候选与 from_settings_str 一致：回落 Today 再写入
+            let persisted = if view.is_default_view_candidate() {
+                view
+            } else {
+                WorkbenchView::Today
+            };
+            Self::set_value(db, "list.default_view", persisted.as_str())?;
         }
         if let Some(value) = dto.float_always_on_top {
             Self::set_value(

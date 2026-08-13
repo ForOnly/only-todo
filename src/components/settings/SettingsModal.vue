@@ -3,13 +3,23 @@ import { ref, watch } from "vue";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppModal from "@/components/common/AppModal.vue";
-import type { FloatDefaultMode, SortBy, SortOrder, UiLocale, UiTheme, UpdateSettingsDto } from "@/api/types";
+import type {
+  FloatDefaultMode,
+  SortBy,
+  SortOrder,
+  UiLocale,
+  UiTheme,
+  UpdateSettingsDto,
+  WorkbenchView,
+} from "@/api/types";
+import { DEFAULT_VIEW_OPTIONS } from "@/constants/workbenchViews";
 import { parseListDefaultSort, serializeListDefaultSort } from "@/utils/listSort";
 
 const props = defineProps<{
   open: boolean;
   notificationEnabled: boolean;
   listDefaultSort: string;
+  listDefaultView: WorkbenchView;
   floatAlwaysOnTop: boolean;
   floatVisibleCount: number;
   floatAutoShow: boolean;
@@ -39,6 +49,9 @@ const localTheme = ref<UiTheme>(props.uiTheme);
 const localLocale = ref<UiLocale>(props.uiLocale);
 const localSortBy = ref<SortBy>("priority");
 const localSortOrder = ref<SortOrder>("desc");
+const localDefaultView = ref<WorkbenchView>(
+  props.listDefaultView === "tag" ? "today" : props.listDefaultView,
+);
 
 watch(
   () => props.open,
@@ -53,6 +66,8 @@ watch(
       localAutostart.value = props.autostartEnabled;
       localTheme.value = props.uiTheme;
       localLocale.value = props.uiLocale;
+      localDefaultView.value =
+        props.listDefaultView === "tag" ? "today" : props.listDefaultView;
       const sort = parseListDefaultSort(props.listDefaultSort);
       localSortBy.value = sort.sortBy;
       localSortOrder.value = sort.sortOrder;
@@ -67,6 +82,7 @@ function save() {
       sortBy: localSortBy.value,
       sortOrder: localSortOrder.value,
     }),
+    listDefaultView: localDefaultView.value,
     floatAlwaysOnTop: localAlwaysOnTop.value,
     floatVisibleCount: localVisibleCount.value,
     floatAutoShow: localAutoShow.value,
@@ -110,6 +126,15 @@ function save() {
 
     <section class="group">
       <h3>{{ $t("settings.list") }}</h3>
+      <label class="setting-row">
+        <span>{{ $t("settings.defaultView") }}</span>
+        <select v-model="localDefaultView" class="select-input">
+          <option v-for="id in DEFAULT_VIEW_OPTIONS" :key="id" :value="id">
+            {{ $t(`views.${id}`) }}
+          </option>
+        </select>
+      </label>
+      <p class="hint">{{ $t("settings.defaultViewHint") }}</p>
       <label class="setting-row">
         <span>{{ $t("settings.defaultSort") }}</span>
         <select v-model="localSortBy" class="select-input">

@@ -2,5 +2,6 @@
 import type { HomeShape } from "./HomeShape";
 import type { UiLocale } from "./UiLocale";
 import type { UiTheme } from "./UiTheme";
+import type { WorkbenchView } from "./WorkbenchView";
 
-export type SettingsDto = { notificationEnabled: boolean, listDefaultSort: string, floatAlwaysOnTop: boolean, floatVisibleCount: number, floatAutoShow: boolean, floatDefaultMode: HomeShape, floatHoverPreview: boolean, autostartEnabled: boolean, uiTheme: UiTheme, uiLocale: UiLocale, };
+export type SettingsDto = { notificationEnabled: boolean, listDefaultSort: string, listDefaultView: WorkbenchView, floatAlwaysOnTop: boolean, floatVisibleCount: number, floatAutoShow: boolean, floatDefaultMode: HomeShape, floatHoverPreview: boolean, autostartEnabled: boolean, uiTheme: UiTheme, uiLocale: UiLocale, };

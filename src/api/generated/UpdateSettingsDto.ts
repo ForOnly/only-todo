@@ -2,5 +2,6 @@
 import type { HomeShape } from "./HomeShape";
 import type { UiLocale } from "./UiLocale";
 import type { UiTheme } from "./UiTheme";
+import type { WorkbenchView } from "./WorkbenchView";
 
-export type UpdateSettingsDto = { notificationEnabled: boolean | null, listDefaultSort: string | null, floatAlwaysOnTop: boolean | null, floatVisibleCount: number | null, floatAutoShow: boolean | null, floatDefaultMode: HomeShape | null, floatHoverPreview: boolean | null, autostartEnabled: boolean | null, uiTheme: UiTheme | null, uiLocale: UiLocale | null, };
+export type UpdateSettingsDto = { notificationEnabled: boolean | null, listDefaultSort: string | null, listDefaultView: WorkbenchView | null, floatAlwaysOnTop: boolean | null, floatVisibleCount: number | null, floatAutoShow: boolean | null, floatDefaultMode: HomeShape | null, floatHoverPreview: boolean | null, autostartEnabled: boolean | null, uiTheme: UiTheme | null, uiLocale: UiLocale | null, };

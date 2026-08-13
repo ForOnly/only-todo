@@ -6,6 +6,8 @@ pub mod reminder;
 pub mod status;
 pub mod todo;
 
+use todo::WorkbenchView;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -190,6 +192,7 @@ impl UiLocale {
 pub struct SettingsDto {
     pub notification_enabled: bool,
     pub list_default_sort: String,
+    pub list_default_view: WorkbenchView,
     pub float_always_on_top: bool,
     #[ts(type = "number")]
     pub float_visible_count: u32,
@@ -209,6 +212,8 @@ pub struct UpdateSettingsDto {
     pub notification_enabled: Option<bool>,
     #[serde(default)]
     pub list_default_sort: Option<String>,
+    #[serde(default)]
+    pub list_default_view: Option<WorkbenchView>,
     #[serde(default)]
     pub float_always_on_top: Option<bool>,
     #[serde(default)]

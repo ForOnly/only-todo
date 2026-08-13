@@ -80,6 +80,7 @@ export type UpdateReminderDto = { id: string } & Partial<{
 export type UpdateSettingsDto = Partial<{
   notificationEnabled: boolean;
   listDefaultSort: string;
+  listDefaultView: WorkbenchView;
   floatAlwaysOnTop: boolean;
   floatVisibleCount: number;
   floatAutoShow: boolean;

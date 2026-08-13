@@ -17,7 +17,6 @@ import type {
 import { listAllTags, listTodos, getTodo, transitionTodo } from "@/api/todos";
 import { listEvents } from "@/api/events";
 import { getSettings, updateSettings } from "@/api/settings";
-import { showFloatingWindow } from "@/api/window";
 import type { EventDto } from "@/api/types";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
@@ -105,6 +104,7 @@ const createOpen = ref(false);
 const createInitialDue = ref<string | null>(null);
 const notificationEnabled = ref(true);
 const listDefaultSortRaw = ref('{"sort_by":"priority","sort_order":"desc"}');
+const listDefaultView = ref<WorkbenchView>("today");
 const floatAlwaysOnTop = ref(true);
 const floatVisibleCount = ref(5);
 const floatAutoShow = ref(true);
@@ -121,11 +121,13 @@ const recentEvents = ref<EventDto[]>([]);
 const activityCollapsed = ref(false);
 const eventUnlisteners: (() => void)[] = [];
 
+/** 同步设置到本地状态；不切换侧栏 view（避免主题/语言保存时跳视图） */
 async function loadAndApplySettings() {
   try {
     const settings = await getSettings();
     notificationEnabled.value = settings.notificationEnabled;
     listDefaultSortRaw.value = settings.listDefaultSort;
+    listDefaultView.value = settings.listDefaultView;
     floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
     floatVisibleCount.value = settings.floatVisibleCount;
     floatAutoShow.value = settings.floatAutoShow;
@@ -145,6 +147,11 @@ async function loadAndApplySettings() {
 
 onMounted(async () => {
   await loadAndApplySettings();
+  // 仅冷启动应用默认归类；后端 from_settings_str 已排除 tag，此处再防一层
+  if (listDefaultView.value !== "tag") {
+    view.value = listDefaultView.value;
+    activeTag.value = null;
+  }
 
   await fetchTodos();
   await loadTags();
@@ -474,14 +481,6 @@ function handleEmptyAction(action: "create" | "all") {
   }
 }
 
-async function handleOpenCompanion() {
-  try {
-    await showFloatingWindow();
-  } catch (err) {
-    listError.value = formatErrorMessage(err);
-  }
-}
-
 async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0]) {
   settingsSaving.value = true;
   settingsError.value = null;
@@ -489,6 +488,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
     const settings = await updateSettings(payload);
     notificationEnabled.value = settings.notificationEnabled;
     listDefaultSortRaw.value = settings.listDefaultSort;
+    listDefaultView.value = settings.listDefaultView;
     floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
     floatVisibleCount.value = settings.floatVisibleCount;
     floatAutoShow.value = settings.floatAutoShow;
@@ -502,6 +502,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       const sort = parseListDefaultSort(settings.listDefaultSort);
       setSort(sort.sortBy, sort.sortOrder);
     }
+    // 保存默认视图不强制切换当前侧栏
     settingsOpen.value = false;
   } catch (err) {
     settingsError.value = formatErrorMessage(err);
@@ -521,7 +522,6 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
         settingsError = null;
         settingsOpen = true;
       "
-      @open-companion="handleOpenCompanion"
     />
 
     <div class="body">
@@ -619,6 +619,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       :open="settingsOpen"
       :notification-enabled="notificationEnabled"
       :list-default-sort="listDefaultSortRaw"
+      :list-default-view="listDefaultView"
       :float-always-on-top="floatAlwaysOnTop"
       :float-visible-count="floatVisibleCount"
       :float-auto-show="floatAutoShow"

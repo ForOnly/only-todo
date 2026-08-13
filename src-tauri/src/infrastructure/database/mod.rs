@@ -56,6 +56,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 10,
         sql: include_str!("../../../migrations/010_ui_theme_locale.sql"),
     },
+    Migration {
+        version: 11,
+        sql: include_str!("../../../migrations/011_list_default_view.sql"),
+    },
 ];
 
 impl Database {

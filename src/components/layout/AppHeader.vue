@@ -10,7 +10,6 @@ const emit = defineEmits<{
   search: [];
   create: [];
   settings: [];
-  openCompanion: [];
 }>();
 </script>
 
@@ -28,13 +27,6 @@ const emit = defineEmits<{
         @keydown.enter="emit('search')"
       />
       <AppButton variant="primary" @click="emit('create')">{{ $t("header.newTodo") }}</AppButton>
-      <AppButton
-        variant="ghost"
-        :title="$t('header.openCompanionTitle')"
-        @click="emit('openCompanion')"
-      >
-        {{ $t("header.openCompanion") }}
-      </AppButton>
       <AppButton variant="ghost" @click="emit('settings')">{{ $t("header.settings") }}</AppButton>
     </div>
   </header>
@@ -64,12 +56,15 @@ const emit = defineEmits<{
   display: flex;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
   justify-content: flex-end;
 }
 
 .search {
-  width: min(280px, 40vw);
+  flex: 1;
+  max-width: 320px;
+  min-width: 120px;
   padding: 8px 10px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
