@@ -121,30 +121,51 @@ function onPointerCancel(event: PointerEvent) {
   touch-action: none;
 }
 
+.float-ball-host:active {
+  cursor: grabbing;
+}
+
 .float-ball {
-  width: 60px;
-  height: 60px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: var(--color-accent);
-  box-shadow: var(--shadow-md);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-on-accent);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   font-family: var(--font-ui);
+  background:
+    radial-gradient(circle at 32% 28%, color-mix(in srgb, #fff 28%, transparent), transparent 46%),
+    var(--color-accent);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.2s ease;
+}
+
+.float-ball-host:hover .float-ball {
+  transform: scale(1.04);
 }
 
 .float-ball.urgency-active {
-  background: var(--color-accent);
+  background:
+    radial-gradient(circle at 32% 28%, color-mix(in srgb, #fff 28%, transparent), transparent 46%),
+    var(--color-accent);
 }
 
 .float-ball.urgency-overdue {
-  background: var(--color-priority-urgent);
+  background:
+    radial-gradient(circle at 32% 28%, color-mix(in srgb, #fff 22%, transparent), transparent 46%),
+    var(--color-priority-urgent);
 }
 
 .badge {
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 </style>

@@ -5,21 +5,19 @@ import { listen } from "@tauri-apps/api/event";
 
 import * as todoApi from "@/api/todos";
 import { getSettings } from "@/api/settings";
-import type { CompanionSession, RepeatType, SettingsDto, TodoDto } from "@/api/types";
+import type { CompanionSession, SettingsDto, TodoDto } from "@/api/types";
 import { TITLE_MAX_LENGTH } from "@/api/types";
 import {
   companionClickChrome,
+  companionCollapseToStrip,
   companionMinimize,
   companionPointerCluster,
   companionRefreshSession,
   getCompanionSession,
-  hideFloatingWindow,
 } from "@/api/window";
-import FloatDetailPanel from "@/components/float/FloatDetailPanel.vue";
 import FloatTaskList from "@/components/float/FloatTaskList.vue";
 import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
-import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { TAURI_EVENTS } from "@/constants/events";
 import { applyAppearance } from "@/utils/appearance";
 import { formatErrorMessage } from "@/utils/error";
@@ -34,7 +32,6 @@ const selectedId = ref<string | null>(null);
 const visibleCount = ref(5);
 const quickTitle = ref("");
 const creating = ref(false);
-const reminderError = ref<string | null>(null);
 const quickInput = ref<HTMLInputElement | null>(null);
 let fetchToken = 0;
 
@@ -50,43 +47,7 @@ const { startDrag, onPointerUp } = useCompanionDrag("body");
 
 const isDocked = computed(() => session.value?.placement === "docked");
 const activeCount = computed(() => session.value?.activeCount ?? 0);
-const showMinus = computed(() => {
-  const current = session.value;
-  if (!current) return false;
-  return current.panelMode !== "closed";
-});
-const minusTitle = computed(() => {
-  const current = session.value;
-  if (!current) return t("companion.dockToEdge");
-  if (current.placement === "docked") return t("companion.collapseToStrip");
-  if (current.homeShape === "ball") return t("companion.backToBall");
-  return t("companion.dockToEdge");
-});
 const isPreview = computed(() => session.value?.panelMode === "preview");
-
-const {
-  detail,
-  editTitle,
-  editDescription,
-  editPriority,
-  editDueDate,
-  saving,
-  error: detailError,
-  isDirty,
-  flushAutosave,
-  save,
-  reload,
-  transitionTo,
-} = useTodoDetail(selectedId, fetchTodos);
-
-const {
-  reminders,
-  loading: remindersLoading,
-  error: remindersError,
-  fetchReminders,
-  addReminder,
-  removeReminder,
-} = useReminders(selectedId);
 
 let unlistenSession: (() => void) | null = null;
 let unlistenSettings: (() => void) | null = null;
@@ -125,6 +86,10 @@ async function fetchTodos(): Promise<void> {
     });
     if (token !== fetchToken) return;
     todos.value = listResult.items;
+    // 列表刷新后若预览项已不在，关闭预览
+    if (selectedId.value && !todos.value.some((t) => t.id === selectedId.value)) {
+      selectedId.value = null;
+    }
   } catch (err) {
     if (token !== fetchToken) return;
     error.value = formatErrorMessage(err);
@@ -135,27 +100,25 @@ async function fetchTodos(): Promise<void> {
   }
 }
 
-async function closeDetail(): Promise<boolean> {
-  if (isDirty()) {
-    if (!(await flushAutosave())) return false;
-  }
+function closeDetail() {
   selectedId.value = null;
-  return true;
 }
 
-async function selectTodo(id: string) {
+function selectTodo(id: string) {
   if (selectedId.value === id) {
-    await closeDetail();
+    closeDetail();
     return;
-  }
-  if (selectedId.value && isDirty()) {
-    if (!(await flushAutosave())) return;
   }
   selectedId.value = id;
 }
 
-async function openMainWithTodo(id: string) {
-  await todoApi.showMainWindow(id);
+async function openMainWithTodo(id?: string | null) {
+  const todoId = id ?? selectedId.value;
+  await todoApi.showMainWindow(todoId == null ? undefined : todoId);
+}
+
+async function openMainWindow() {
+  await openMainWithTodo(selectedId.value);
 }
 
 async function completeTodo(id: string) {
@@ -201,7 +164,7 @@ async function submitQuickAdd() {
 }
 
 async function minimize() {
-  if (!(await closeDetail())) return;
+  closeDetail();
   try {
     applySession(await companionMinimize());
   } catch (err) {
@@ -210,38 +173,13 @@ async function minimize() {
   }
 }
 
-async function hideCompanion() {
-  if (!(await closeDetail())) return;
+async function collapseToStrip() {
+  closeDetail();
   try {
-    await hideFloatingWindow();
+    applySession(await companionCollapseToStrip());
   } catch (err) {
-    console.error("hide companion failed", err);
-  }
-}
-
-async function handleSave() {
-  if (await save()) {
-    selectedId.value = null;
-  }
-}
-
-async function handleAddReminder(datetime: string, repeatType?: RepeatType) {
-  if (!selectedId.value) return;
-  reminderError.value = null;
-  try {
-    await addReminder(selectedId.value, datetime, repeatType);
-  } catch (err) {
-    reminderError.value = formatErrorMessage(err);
-  }
-}
-
-async function handleRemoveReminder(id: string) {
-  if (!selectedId.value) return;
-  reminderError.value = null;
-  try {
-    await removeReminder(id, selectedId.value);
-  } catch (err) {
-    reminderError.value = formatErrorMessage(err);
+    console.error("collapseToStrip failed", err);
+    error.value = formatErrorMessage(err);
   }
 }
 
@@ -361,10 +299,6 @@ watch(panelVisible, async (visible) => {
     await fetchTodos();
     return;
   }
-  // Chrome Esc/收条等不经 Body minimize：收起时 flush，失败则保留选中
-  if (selectedId.value && isDirty()) {
-    if (!(await flushAutosave())) return;
-  }
   selectedId.value = null;
 });
 
@@ -398,13 +332,6 @@ onMounted(async () => {
           applySession(await companionRefreshSession());
         } catch {
           // ignore
-        }
-        if (!selectedId.value || saving.value) return;
-        if (isDirty()) {
-          await flushAutosave();
-        } else {
-          await reload();
-          await fetchReminders(selectedId.value);
         }
       })();
     }, 200);
@@ -456,29 +383,29 @@ onUnmounted(() => {
       @pointercancel="onHeaderPointerUp"
     >
       <span class="title">{{ $t("common.brand") }}</span>
-      <span class="count">{{ $t("companion.activeCount", { n: activeCount }) }}</span>
-      <button
-        v-if="showMinus"
-        type="button"
-        class="icon-btn"
-        :title="minusTitle"
-        :aria-label="minusTitle"
-        @click.stop="minimize"
-      >
-        −
-      </button>
-      <button
-        type="button"
-        class="icon-btn"
-        :title="$t('companion.hideToTray')"
-        :aria-label="$t('companion.hideToTray')"
-        @click.stop="hideCompanion"
-      >
-        ×
-      </button>
+      <span class="count-pill">{{ $t("companion.activeCount", { n: activeCount }) }}</span>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="open-main-btn"
+          :title="$t('companion.openMain')"
+          @click.stop="openMainWindow"
+        >
+          {{ $t("companion.openMain") }}
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          :title="$t('companion.collapseToStrip')"
+          :aria-label="$t('companion.collapseToStrip')"
+          @click.stop="collapseToStrip"
+        >
+          ×
+        </button>
+      </div>
     </header>
 
-    <form class="quick-add" @submit.prevent="submitQuickAdd">
+    <form class="quick-add" :class="{ busy: creating }" @submit.prevent="submitQuickAdd">
       <input
         ref="quickInput"
         v-model="quickTitle"
@@ -491,8 +418,6 @@ onUnmounted(() => {
 
     <p v-if="error" class="error">{{ error }}</p>
 
-    <p v-if="!selectedId" class="edit-hint">{{ $t("companion.editHint") }}</p>
-
     <FloatTaskList
       :todos="todos"
       :selected-id="selectedId"
@@ -500,25 +425,7 @@ onUnmounted(() => {
       @select="selectTodo"
       @open-main="openMainWithTodo"
       @complete="completeTodo"
-    />
-
-    <FloatDetailPanel
-      v-if="selectedId && detail"
-      :detail="detail"
-      v-model:edit-title="editTitle"
-      v-model:edit-description="editDescription"
-      v-model:edit-priority="editPriority"
-      v-model:edit-due-date="editDueDate"
-      :saving="saving"
-      :error="detailError"
-      :reminders="reminders"
-      :reminders-loading="remindersLoading"
-      :reminders-error="remindersError ?? reminderError"
-      @close="closeDetail"
-      @save="handleSave"
-      @transition="transitionTo"
-      @add-reminder="handleAddReminder"
-      @remove-reminder="handleRemoveReminder"
+      @close-peek="closeDetail"
     />
 
     <AppShellOverlays />
@@ -541,8 +448,8 @@ body,
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
-  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: hidden;
@@ -552,90 +459,135 @@ body,
 
 .preview-hint {
   margin: 0;
-  padding: 4px 12px;
+  padding: 3px 12px;
   font-size: 11px;
+  letter-spacing: 0.02em;
   color: var(--color-accent);
   background: var(--color-accent-soft);
   text-align: center;
 }
 
 .edge-right {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
 .edge-left {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
 .float-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
-  background: var(--color-surface-muted);
-  border-bottom: 1px solid var(--color-border);
+  gap: 8px;
+  padding: 10px 12px 6px;
+  background: transparent;
   cursor: grab;
   user-select: none;
   touch-action: none;
 }
 
 .title {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 650;
+  font-size: 13px;
+  letter-spacing: 0.01em;
 }
 
-.count {
-  flex: 1;
-  font-size: 12px;
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
   color: var(--color-muted);
+  background: var(--color-bg-accent);
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.open-main-btn {
+  margin-right: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.open-main-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 .icon-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
+  background: transparent;
+  color: var(--color-muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
-  transition: background var(--transition-fast);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .icon-btn:hover {
   background: var(--color-bg-accent);
+  color: var(--color-text);
 }
 
 .quick-add {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 4px 12px 10px;
 }
 
 .quick-add input {
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--color-surface-muted);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    opacity 0.15s ease;
 }
 
-.edit-hint {
-  margin: 0;
-  padding: 4px 12px;
-  font-size: 11px;
-  color: var(--color-muted);
-  text-align: center;
+.quick-add input:focus {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+  box-shadow: var(--focus-ring);
+}
+
+.quick-add.busy input {
+  opacity: 0.65;
 }
 
 .error {
-  margin: 0;
-  padding: 8px 12px;
+  margin: 0 12px 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
   background: var(--color-danger-bg);
   color: var(--color-danger);
-  font-size: 13px;
+  font-size: 12px;
 }
 </style>

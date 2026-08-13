@@ -129,6 +129,10 @@ function onPointerCancel(event: PointerEvent) {
   background: transparent;
 }
 
+.dock-strip:active {
+  cursor: grabbing;
+}
+
 .edge-left {
   justify-content: flex-start;
 }
@@ -146,14 +150,23 @@ function onPointerCancel(event: PointerEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: var(--shadow-sm);
+  transition:
+    filter 0.18s ease,
+    transform 0.18s ease,
+    background-color 0.2s ease;
+}
+
+.dock-strip:hover .dock-strip-bar {
+  filter: brightness(1.08);
 }
 
 .edge-left .dock-strip-bar {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 10px 10px 0;
 }
 
 .edge-right .dock-strip-bar {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-radius: 10px 0 0 10px;
 }
 
 .urgency-active .dock-strip-bar {
@@ -168,15 +181,17 @@ function onPointerCancel(event: PointerEvent) {
   position: absolute;
   min-width: 18px;
   height: 18px;
-  padding: 0 4px;
+  padding: 0 5px;
   border-radius: 9px;
-  background: var(--color-text);
-  color: var(--color-surface);
-  font-size: 11px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  font-size: 10px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 16px;
   text-align: center;
   font-family: var(--font-ui);
+  box-shadow: var(--shadow-sm);
 }
 
 .edge-left .count {

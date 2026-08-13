@@ -169,6 +169,30 @@ impl FloatHost {
         apply_and_emit(app)
     }
 
+    /// 面板 ×：一律收成贴边条（含圆球家临时板，不回球、不进托盘）
+    pub fn collapse_to_strip(app: &AppHandle) -> Result<CompanionSession, AppError> {
+        cancel_cluster_timers(app);
+        let state = app_state(app)?;
+        let db = &state.db;
+        let placement = SettingsRepository::get_placement(db)?;
+        match placement {
+            CompanionPlacement::Docked => {
+                let host = host_state(app)?;
+                lock_runtime(&host)?.panel_mode = PanelMode::Closed;
+            }
+            CompanionPlacement::Free => {
+                persist_body_bounds(app).ok();
+                dock_from_body_minimize(app)?;
+                let host = host_state(app)?;
+                let mut rt = lock_runtime(&host)?;
+                rt.visibility = CompanionVisibility::Shown;
+                rt.panel_mode = PanelMode::Closed;
+                rt.temp_body_bounds = None;
+            }
+        }
+        apply_and_emit(app)
+    }
+
     pub fn drag_ended(
         app: &AppHandle,
         which: CompanionSurface,

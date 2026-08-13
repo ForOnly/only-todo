@@ -25,10 +25,11 @@ use commands::{
         list_workbench_todos, restore_todo, transition_todo, update_todo,
     },
     window::{
-        companion_click_chrome, companion_drag_ended, companion_minimize, companion_open_view,
-        companion_pointer_cluster, companion_refresh_session, get_active_todo_count,
-        get_companion_session, hide_floating_window, hide_to_tray, show_floating_window,
-        show_main_window, toggle_floating_window,
+        companion_click_chrome, companion_collapse_to_strip, companion_drag_ended,
+        companion_minimize, companion_open_view, companion_pointer_cluster,
+        companion_refresh_session, get_active_todo_count, get_companion_session,
+        hide_floating_window, hide_to_tray, show_floating_window, show_main_window,
+        toggle_floating_window,
     },
 };
 use float::FloatHost;
@@ -43,7 +44,7 @@ use tauri::{
     Emitter, Manager, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tray_i18n::{read_ui_locale, tray_labels, TrayMenuItems};
+use tray_i18n::{read_ui_locale, sync_tray_float_action, tray_labels, TrayMenuItems};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -109,6 +110,7 @@ pub fn run() {
             companion_refresh_session,
             companion_click_chrome,
             companion_minimize,
+            companion_collapse_to_strip,
             companion_drag_ended,
             companion_pointer_cluster,
             companion_open_view,
@@ -216,9 +218,13 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
     let locale = read_ui_locale(app);
     let labels = tray_labels(locale);
 
+    let float_label = if float::session::companion_is_shown(app) {
+        labels.hide_float
+    } else {
+        labels.show_float
+    };
     let items = TrayMenuItems {
-        show_float: MenuItem::with_id(app, "show_float", labels.show_float, true, None::<&str>)?,
-        show_main: MenuItem::with_id(app, "show_main", labels.show_main, true, None::<&str>)?,
+        float_action: MenuItem::with_id(app, "float_action", float_label, true, None::<&str>)?,
         new_todo: MenuItem::with_id(app, "new_todo", labels.new_todo, true, None::<&str>)?,
         settings: MenuItem::with_id(app, "settings", labels.settings, true, None::<&str>)?,
         quit: MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?,
@@ -226,8 +232,7 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
     let menu = Menu::with_items(
         app,
         &[
-            &items.show_float,
-            &items.show_main,
+            &items.float_action,
             &items.new_todo,
             &items.settings,
             &items.quit,
@@ -246,11 +251,12 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
-            "show_float" => {
-                let _ = commands::window::show_floating_window_impl(app);
-            }
-            "show_main" => {
-                let _ = commands::window::show_main_window_impl(app.clone(), None);
+            "float_action" => {
+                if float::session::companion_is_shown(app) {
+                    let _ = commands::window::hide_floating_window_impl(app);
+                } else {
+                    let _ = commands::window::show_floating_window_impl(app);
+                }
             }
             "new_todo" => {
                 let _ = commands::window::show_main_window_impl(app.clone(), None);
@@ -273,10 +279,11 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> 
             } = event
             {
                 let app = tray.app_handle();
-                let _ = commands::window::toggle_floating_window_impl(app);
+                let _ = commands::window::toggle_main_window_impl(app);
             }
         })
         .build(app)?;
 
+    sync_tray_float_action(app);
     Ok(())
 }

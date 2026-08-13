@@ -65,6 +65,11 @@ pub fn companion_minimize(app: AppHandle) -> Result<CompanionSession, AppError> 
 }
 
 #[tauri::command]
+pub fn companion_collapse_to_strip(app: AppHandle) -> Result<CompanionSession, AppError> {
+    FloatHost::collapse_to_strip(&app)
+}
+
+#[tauri::command]
 pub fn companion_drag_ended(
     app: AppHandle,
     which: CompanionSurface,
@@ -104,6 +109,24 @@ pub fn show_main_window_impl(app: AppHandle, todo_id: Option<String>) -> Result<
             })?;
     }
 
+    Ok(())
+}
+
+/// 托盘左键：显隐主窗口（与助理无关）。
+/// 可见（含系统最小化）→ `hide()` 收入托盘；已隐藏 → show/unminimize/focus。
+pub fn toggle_main_window_impl(app: &AppHandle) -> Result<(), AppError> {
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    // 最小化时 is_visible 仍可能为 true：一律视为在场，收入托盘而非还原
+    let visible = window.is_visible().unwrap_or(false);
+    if visible {
+        window.hide().map_err(|error| AppError::InternalError {
+            message: error.to_string(),
+        })?;
+    } else {
+        show_main_window_impl(app.clone(), None)?;
+    }
     Ok(())
 }
 

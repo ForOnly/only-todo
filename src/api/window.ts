@@ -37,6 +37,11 @@ export async function companionMinimize(): Promise<CompanionSession> {
   return invoke("companion_minimize");
 }
 
+/** Tauri Command: companion_collapse_to_strip */
+export async function companionCollapseToStrip(): Promise<CompanionSession> {
+  return invoke("companion_collapse_to_strip");
+}
+
 /** Tauri Command: companion_drag_ended */
 export async function companionDragEnded(which: CompanionSurface): Promise<CompanionDragEndResult> {
   return invoke("companion_drag_ended", { which });

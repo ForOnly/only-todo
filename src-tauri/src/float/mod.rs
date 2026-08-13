@@ -26,6 +26,12 @@ pub fn start_chrome_hit_test(app: &tauri::AppHandle) {
 }
 
 pub fn update_tray_tooltip(app: &tauri::AppHandle) {
+    update_tray_tooltip_text(app);
+    crate::tray_i18n::sync_tray_float_action(app);
+}
+
+/// 仅更新 tooltip 文案（locale 路径已单独 sync 菜单时用）
+pub fn update_tray_tooltip_text(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
