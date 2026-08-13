@@ -9,11 +9,11 @@ export const TAURI_EVENTS = {
   NAVIGATE_TO_TODO: "navigate-to-todo",
   /** 托盘菜单「设置」— 打开 SettingsModal */
   OPEN_SETTINGS: "open-settings",
-  /** 设置已更新 — 伴侣刷新可见条数等 */
+  /** 设置已更新 — 助理刷新可见条数等 */
   SETTINGS_UPDATED: "settings-updated",
-  /** 任务/提醒写成功 — 主窗与伴侣刷新列表与计数 */
+  /** 任务/提醒写成功 — 主窗与助理刷新列表与计数 */
   TODOS_CHANGED: "todos-changed",
-  /** 伴侣会话变更 */
+  /** 助理会话变更 */
   FLOAT_SESSION_CHANGED: "float-session-changed",
 } as const;
 

@@ -19,14 +19,14 @@ pub struct TrayLabels {
 pub fn tray_labels(locale: UiLocale) -> TrayLabels {
     match locale {
         UiLocale::EnUS => TrayLabels {
-            show_float: "Show companion",
+            show_float: "Show assistant",
             show_main: "Open main window",
             new_todo: "New task",
             settings: "Settings",
             quit: "Quit",
         },
         UiLocale::ZhCN => TrayLabels {
-            show_float: "显示伴侣",
+            show_float: "显示助理",
             show_main: "打开主窗口",
             new_todo: "新建任务",
             settings: "设置",

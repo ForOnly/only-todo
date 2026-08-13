@@ -176,7 +176,7 @@ onMounted(async () => {
     }),
   );
 
-  // 跨窗写操作后刷新；无 dirty 不回写，避免覆盖伴侣修改与 update 风暴
+  // 跨窗写操作后刷新；无 dirty 不回写，避免覆盖助理修改与 update 风暴
   let todosChangedTimer: ReturnType<typeof setTimeout> | null = null;
   eventUnlisteners.push(
     await listen(TAURI_EVENTS.TODOS_CHANGED, () => {

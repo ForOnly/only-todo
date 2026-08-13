@@ -23,7 +23,7 @@ export function statusActionLabel(
   return to;
 }
 
-/** 供 Inspector / 伴侣详情：随 status 拉取后端动词列表 */
+/** 供 Inspector / 助理详情：随 status 拉取后端动词列表 */
 export function useStatusActions(status: Ref<TodoStatus | null | undefined>): {
   actions: Ref<StatusActionDto[]>;
 } {
