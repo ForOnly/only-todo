@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 
 import type {
@@ -25,6 +24,7 @@ import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
 import ViewSidebar from "@/components/workbench/ViewSidebar.vue";
 import TaskListPane from "@/components/workbench/TaskListPane.vue";
 import TaskInspector from "@/components/workbench/TaskInspector.vue";
+import ActivityStrip from "@/components/workbench/ActivityStrip.vue";
 import { TAURI_EVENTS } from "@/constants/events";
 import { modalEscDepth } from "@/composables/useModalEscStack";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
@@ -32,13 +32,7 @@ import { useTodos } from "@/composables/useTodos";
 import { applyAppearance } from "@/utils/appearance";
 import { dueDateRangeForFilter, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
-import {
-  formatRelativeTime,
-  translateEventType,
-} from "@/utils/i18nFormat";
 import { parseListDefaultSort } from "@/utils/listSort";
-
-const { t } = useI18n();
 
 const {
   todos,
@@ -119,7 +113,6 @@ const overdueCount = ref(0);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
-const activityCollapsed = ref(false);
 const eventUnlisteners: (() => void)[] = [];
 
 /** 同步设置到本地状态；不切换侧栏 view（避免主题/语言保存时跳视图） */
@@ -579,25 +572,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
 
     <p v-if="listError" class="global-error">{{ listError }}</p>
 
-    <aside v-if="recentEvents.length" class="activity" :aria-label="$t('activity.aria')">
-      <header class="activity-header">
-        <h2 class="activity-title">{{ $t("activity.title") }}</h2>
-        <button
-          type="button"
-          class="activity-toggle"
-          :aria-expanded="!activityCollapsed"
-          @click="activityCollapsed = !activityCollapsed"
-        >
-          {{ activityCollapsed ? $t("activity.expand") : $t("activity.collapse") }}
-        </button>
-      </header>
-      <ul v-show="!activityCollapsed" class="activity-list">
-        <li v-for="ev in recentEvents" :key="ev.id" class="activity-item">
-          <span class="activity-type">{{ translateEventType(ev.eventType, t) }}</span>
-          <span class="activity-meta">{{ formatRelativeTime(ev.createdAt, t) }}</span>
-        </li>
-      </ul>
-    </aside>
+    <ActivityStrip :events="recentEvents" />
 
     <CreateTodoModal
       ref="createModalRef"
@@ -663,73 +638,5 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   padding: 8px 16px;
   background: var(--color-danger-bg);
   color: var(--color-danger);
-}
-
-.activity {
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface-muted);
-  padding: 8px 16px 12px;
-  max-height: 120px;
-  overflow: auto;
-}
-
-.activity-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.activity-title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-muted);
-  letter-spacing: 0.02em;
-}
-
-.activity-toggle {
-  border: none;
-  background: transparent;
-  color: var(--color-accent);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-  transition: color var(--transition-fast);
-}
-
-.activity-toggle:hover {
-  color: var(--color-accent-hover);
-}
-
-.activity-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.activity-item {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.activity-type {
-  font-weight: 600;
-  color: var(--color-text);
-  min-width: 140px;
-}
-
-.activity-meta {
-  opacity: 0.85;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>

@@ -75,6 +75,7 @@ impl ReminderService {
         ReminderRepository::advance(db, &reminder)?;
         let payload = serde_json::json!({
             "repeatType": reminder.repeat_type.as_str(),
+            "title": audit_todo_title(db, &reminder.todo_id),
         })
         .to_string();
         write_audit_event(db, "reminder", reminder_id, "reminder.triggered", &payload);
@@ -96,7 +97,11 @@ impl ReminderService {
         }
 
         let reminder = ReminderRepository::snooze(db, id, minutes)?;
-        let payload = serde_json::json!({ "minutes": minutes }).to_string();
+        let payload = serde_json::json!({
+            "minutes": minutes,
+            "title": audit_todo_title(db, &existing.todo_id),
+        })
+        .to_string();
         write_audit_event(db, "reminder", id, "reminder.snoozed", &payload);
         Ok(reminder.into())
     }
@@ -117,6 +122,22 @@ fn write_audit_event(
             event_type,
             "failed to write audit event"
         );
+    }
+}
+
+/** 审计快照用标题；任务不存在则空串，其它错误打 warn 后仍不阻断提醒主流程 */
+fn audit_todo_title(db: &Database, todo_id: &str) -> String {
+    match TodoRepository::get_by_id(db, todo_id) {
+        Ok(todo) => todo.title,
+        Err(AppError::NotFound { .. }) => String::new(),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                todo_id,
+                "failed to load todo title for audit snapshot"
+            );
+            String::new()
+        }
     }
 }
 

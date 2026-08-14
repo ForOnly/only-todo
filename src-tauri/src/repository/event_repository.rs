@@ -32,6 +32,7 @@ impl EventRepository {
     }
 
     /// 按 created_at 升序返回 after 之后的事件（不含 after 本身）。
+    /// 无 after 时先按最新取出再反转为时间正序，与有游标路径同为升序。
     pub fn list_since(
         db: &Database,
         after: Option<&str>,
@@ -85,7 +86,6 @@ impl EventRepository {
                     message: error.to_string(),
                 })?);
             }
-            // 无 after 时按最新优先查询，再反转为时间正序便于活动流展示
             if after.is_none() {
                 items.reverse();
             }

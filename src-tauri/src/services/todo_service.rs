@@ -290,8 +290,12 @@ impl TodoService {
 
         let from = todo.status;
         let updated = TodoRepository::transition(db, id, target)?;
-        let payload =
-            serde_json::json!({ "from": from.as_str(), "to": target.as_str() }).to_string();
+        let payload = serde_json::json!({
+            "from": from.as_str(),
+            "to": target.as_str(),
+            "title": todo.title,
+        })
+        .to_string();
         if let Err(error) = EventRepository::write(db, "todo", id, "todo.transitioned", &payload) {
             tracing::warn!(
                 error = %error,
