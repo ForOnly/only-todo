@@ -4,7 +4,6 @@ use tauri_plugin_autostart::ManagerExt;
 use crate::domain::{SettingsDto, UpdateSettingsDto};
 use crate::errors::AppError;
 use crate::float::host::FloatHost;
-use crate::repository::settings_repository::SettingsRepository;
 use crate::services::settings_service::SettingsService;
 use crate::state::AppState;
 
@@ -27,8 +26,7 @@ pub fn update_settings(
         .ui_locale
         .is_some_and(|locale| locale != previous.ui_locale);
 
-    let previous_home = SettingsRepository::get_home_shape(&state.db)?;
-    // 先落库，避免自启 OS API 失败拖垮通知/伴侣等其它设置
+    // 先落库，避免自启 OS API 失败拖垮通知/助理等其它设置
     let settings = SettingsService::update(&state.db, dto)?;
 
     if autostart_changed {
@@ -39,7 +37,7 @@ pub fn update_settings(
         crate::tray_i18n::apply_tray_locale(&app, settings.ui_locale);
     }
 
-    let home_changed = settings.float_default_mode != previous_home;
+    let home_changed = settings.float_default_mode != previous.float_default_mode;
     let _ = FloatHost::on_settings_updated(&app, home_changed);
     let _ = app.emit("settings-updated", &settings);
     Ok(settings)

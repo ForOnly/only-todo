@@ -68,6 +68,6 @@ export function dueDateRangeForFilter(
   if (filter === "today") {
     return { after: start.toISOString(), before: end.toISOString() };
   }
-  // overdue
+  // 逾期：截止于今日零点之前
   return { before: start.toISOString() };
 }

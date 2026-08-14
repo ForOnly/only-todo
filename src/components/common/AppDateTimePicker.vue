@@ -68,7 +68,7 @@ const monthTitle = computed(() => {
 });
 
 const weekdays = computed(() => {
-  // Sun–Sat labels from a known Sunday
+  // 从已知周日生成周日到周六的短星期文案
   const start = new Date(2024, 0, 7);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);

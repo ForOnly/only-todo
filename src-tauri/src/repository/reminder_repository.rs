@@ -8,8 +8,6 @@ use crate::domain::reminder::{
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
-const MAX_SNOOZE_COUNT: i32 = 3;
-
 pub struct ReminderRepository;
 
 impl ReminderRepository {
@@ -293,12 +291,6 @@ impl ReminderRepository {
 
     pub fn snooze(db: &Database, id: &str, minutes: i64) -> Result<Reminder, AppError> {
         let mut reminder = Self::get_by_id(db, id)?;
-        if reminder.snooze_count >= MAX_SNOOZE_COUNT {
-            return Err(AppError::ValidationError {
-                message: "snooze limit reached".into(),
-            });
-        }
-
         reminder.snooze_count += 1;
         reminder.next_trigger_at = Utc::now() + ChronoDuration::minutes(minutes);
         reminder.enabled = true;

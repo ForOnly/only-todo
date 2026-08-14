@@ -34,3 +34,14 @@ jobs:
           workspaces: src-tauri
       - run: cargo check
       - run: cargo clippy -- -D warnings
+
+  gen-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo run --manifest-path src-tauri/Cargo.toml --bin export-ts
+      - run: git diff --exit-code src/api/generated

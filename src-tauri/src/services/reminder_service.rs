@@ -8,6 +8,7 @@ use crate::repository::reminder_repository::ReminderRepository;
 use crate::repository::todo_repository::TodoRepository;
 
 const MAX_REMINDERS_PER_TODO: i64 = 5;
+const MAX_SNOOZE_COUNT: i32 = 3;
 const SNOOZE_OPTIONS: [i64; 4] = [5, 15, 30, 60];
 
 pub struct ReminderService;
@@ -76,7 +77,7 @@ impl ReminderService {
             "repeatType": reminder.repeat_type.as_str(),
         })
         .to_string();
-        let _ = EventRepository::write(db, "reminder", reminder_id, "reminder.triggered", &payload);
+        write_audit_event(db, "reminder", reminder_id, "reminder.triggered", &payload);
         Ok(())
     }
 
@@ -87,10 +88,35 @@ impl ReminderService {
             });
         }
 
+        let existing = ReminderRepository::get_by_id(db, id)?;
+        if existing.snooze_count >= MAX_SNOOZE_COUNT {
+            return Err(AppError::ValidationError {
+                message: "snooze limit reached".into(),
+            });
+        }
+
         let reminder = ReminderRepository::snooze(db, id, minutes)?;
         let payload = serde_json::json!({ "minutes": minutes }).to_string();
-        let _ = EventRepository::write(db, "reminder", id, "reminder.snoozed", &payload);
+        write_audit_event(db, "reminder", id, "reminder.snoozed", &payload);
         Ok(reminder.into())
+    }
+}
+
+fn write_audit_event(
+    db: &Database,
+    entity_type: &str,
+    entity_id: &str,
+    event_type: &str,
+    payload: &str,
+) {
+    if let Err(error) = EventRepository::write(db, entity_type, entity_id, event_type, payload) {
+        tracing::warn!(
+            error = %error,
+            entity_type,
+            entity_id,
+            event_type,
+            "failed to write audit event"
+        );
     }
 }
 

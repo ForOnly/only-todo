@@ -292,7 +292,13 @@ impl TodoService {
         let updated = TodoRepository::transition(db, id, target)?;
         let payload =
             serde_json::json!({ "from": from.as_str(), "to": target.as_str() }).to_string();
-        let _ = EventRepository::write(db, "todo", id, "todo.transitioned", &payload);
+        if let Err(error) = EventRepository::write(db, "todo", id, "todo.transitioned", &payload) {
+            tracing::warn!(
+                error = %error,
+                entity_id = id,
+                "failed to write audit event"
+            );
+        }
         Ok(updated.into())
     }
 }
