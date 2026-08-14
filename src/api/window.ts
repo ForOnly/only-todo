@@ -50,12 +50,13 @@ export async function companionDragEnded(which: CompanionSurface): Promise<Compa
 /** Tauri Command: companion_pointer_cluster */
 export async function companionPointerCluster(
   surface: CompanionSurface,
-  opts?: { inside?: boolean; focused?: boolean },
+  opts?: { inside?: boolean; focused?: boolean; hold?: boolean },
 ): Promise<CompanionSession> {
   return invoke("companion_pointer_cluster", {
     surface,
     inside: opts?.inside ?? null,
     focused: opts?.focused ?? null,
+    hold: opts?.hold ?? null,
   });
 }
 

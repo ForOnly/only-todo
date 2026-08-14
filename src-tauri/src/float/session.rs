@@ -17,6 +17,8 @@ pub(crate) struct ClusterState {
     pub(crate) chrome_inside: bool,
     pub(crate) body_inside: bool,
     pub(crate) body_focused: bool,
+    /// 预览快加有未提交草稿时为 true，不因指针离开/失焦收起
+    pub(crate) hold_preview: bool,
     pub(crate) preview_gen: u64,
     pub(crate) unpreview_gen: u64,
 }
@@ -54,6 +56,7 @@ impl FloatHost {
                 chrome_inside: false,
                 body_inside: false,
                 body_focused: false,
+                hold_preview: false,
                 preview_gen: 0,
                 unpreview_gen: 0,
             }),

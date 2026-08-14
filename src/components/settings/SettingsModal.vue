@@ -15,6 +15,7 @@ import type {
   WorkbenchView,
 } from "@/api/types";
 import { DEFAULT_VIEW_OPTIONS } from "@/constants/workbenchViews";
+import { confirm } from "@/composables/useAppConfirm";
 import { parseListDefaultSort, serializeListDefaultSort } from "@/utils/listSort";
 
 const props = defineProps<{
@@ -56,6 +57,42 @@ const localSortOrder = ref<SortOrder>("desc");
 const localDefaultView = ref<WorkbenchView>(
   props.listDefaultView === "tag" ? "today" : props.listDefaultView,
 );
+const closing = ref(false);
+const baseline = ref("");
+
+type SettingsDraft = {
+  notificationEnabled: boolean;
+  floatAlwaysOnTop: boolean;
+  floatVisibleCount: number;
+  floatAutoShow: boolean;
+  floatDefaultMode: FloatDefaultMode;
+  floatHoverPreview: boolean;
+  autostartEnabled: boolean;
+  uiTheme: UiTheme;
+  uiLocale: UiLocale;
+  sortBy: SortBy;
+  sortOrder: SortOrder;
+  listDefaultView: WorkbenchView;
+};
+
+function captureDraft(): SettingsDraft {
+  return {
+    notificationEnabled: localNotification.value,
+    floatAlwaysOnTop: localAlwaysOnTop.value,
+    floatVisibleCount: localVisibleCount.value,
+    floatAutoShow: localAutoShow.value,
+    floatDefaultMode: localDefaultMode.value,
+    floatHoverPreview: localHoverPreview.value,
+    autostartEnabled: localAutostart.value,
+    uiTheme: localTheme.value,
+    uiLocale: localLocale.value,
+    sortBy: localSortBy.value,
+    sortOrder: localSortOrder.value,
+    listDefaultView: localDefaultView.value,
+  };
+}
+
+const dirty = computed(() => JSON.stringify(captureDraft()) !== baseline.value);
 
 const themeOptions = computed(() => [
   { value: "system", label: t("settings.themeSystem") },
@@ -103,6 +140,8 @@ watch(
       const sort = parseListDefaultSort(props.listDefaultSort);
       localSortBy.value = sort.sortBy;
       localSortOrder.value = sort.sortOrder;
+      closing.value = false;
+      baseline.value = JSON.stringify(captureDraft());
     }
   },
 );
@@ -125,10 +164,32 @@ function save() {
     uiLocale: localLocale.value,
   });
 }
+
+/** Esc / × / 取消：有未保存改动则先确认 */
+async function requestClose() {
+  if (closing.value || props.saving) return;
+  if (dirty.value) {
+    closing.value = true;
+    const ok = await confirm({
+      title: t("common.discardTitle"),
+      message: t("settings.discardMessage"),
+      confirmLabel: t("common.discard"),
+      danger: true,
+    });
+    closing.value = false;
+    if (!ok) return;
+  }
+  emit("close");
+}
 </script>
 
 <template>
-  <AppModal :open="open" :title="$t('settings.title')" @close="emit('close')">
+  <AppModal
+    :open="open"
+    :title="$t('settings.title')"
+    :close-on-backdrop="false"
+    @close="requestClose"
+  >
     <section class="group">
       <h3>{{ $t("settings.appearance") }}</h3>
       <label class="setting-row">
@@ -212,6 +273,9 @@ function save() {
     <p v-if="error" class="error">{{ error }}</p>
 
     <div class="app-modal-actions">
+      <AppButton variant="ghost" :disabled="saving" @click="requestClose">
+        {{ $t("common.cancel") }}
+      </AppButton>
       <AppButton variant="primary" :disabled="saving" @click="save">
         {{ saving ? $t("common.saving") : $t("common.save") }}
       </AppButton>

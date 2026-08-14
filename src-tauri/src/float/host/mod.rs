@@ -215,6 +215,7 @@ impl FloatHost {
         surface: CompanionSurface,
         inside: Option<bool>,
         focused: Option<bool>,
+        hold: Option<bool>,
     ) -> Result<CompanionSession, AppError> {
         let hover = SettingsRepository::get_hover_preview(&app_state(app)?.db)?;
         {
@@ -237,6 +238,9 @@ impl FloatHost {
                     }
                 }
             }
+            if let Some(value) = hold {
+                cluster.hold_preview = value;
+            }
         }
 
         if !hover {
@@ -251,7 +255,7 @@ impl FloatHost {
             let rt = lock_runtime(&host)?;
             (rt.visibility, rt.panel_mode)
         };
-        let (chrome_inside, body_inside, body_focused) = {
+        let (chrome_inside, body_inside, body_focused, hold_preview) = {
             let host = host_state(app)?;
             let cluster = host.cluster.lock().map_err(|_| AppError::InternalError {
                 message: "float host lock poisoned".into(),
@@ -260,6 +264,7 @@ impl FloatHost {
                 cluster.chrome_inside,
                 cluster.body_inside,
                 cluster.body_focused,
+                cluster.hold_preview,
             )
         };
 
@@ -273,9 +278,10 @@ impl FloatHost {
             && !chrome_inside
             && !body_inside
             && !body_focused
+            && !hold_preview
         {
             schedule_unpreview(app.clone());
-        } else if chrome_inside || body_inside || body_focused {
+        } else if chrome_inside || body_inside || body_focused || hold_preview {
             cancel_cluster_timers(app);
         }
 
@@ -432,6 +438,7 @@ fn schedule_unpreview(app: AppHandle) {
                     && !cluster.chrome_inside
                     && !cluster.body_inside
                     && !cluster.body_focused
+                    && !cluster.hold_preview
             })
             .unwrap_or(false);
         if !still {

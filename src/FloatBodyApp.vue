@@ -73,6 +73,11 @@ const panelVisible = computed(() => {
   return current.panelMode !== "closed";
 });
 
+/** 预览态快加未提交文字：Rust hold_preview，指针/焦点仍如实上报 */
+const hasQuickDraft = computed(() => quickTitle.value.trim().length > 0);
+const pointerInside = ref(false);
+const bodyFocused = ref(false);
+
 const shouldFocusQuickAdd = computed(() => {
   const current = session.value;
   if (!current || current.visibility !== "shown") return false;
@@ -239,36 +244,64 @@ function onHeaderPointerUp(event: PointerEvent) {
 }
 
 async function onClusterEnter() {
+  pointerInside.value = true;
   if (!session.value?.hoverPreview) return;
   try {
-    applySession(await companionPointerCluster("body", { inside: true }));
+    applySession(
+      await companionPointerCluster("body", {
+        inside: true,
+        hold: hasQuickDraft.value,
+      }),
+    );
   } catch (err) {
     console.error("body cluster enter failed", err);
   }
 }
 
 async function onClusterLeave() {
+  pointerInside.value = false;
   if (!session.value?.hoverPreview) return;
   try {
-    applySession(await companionPointerCluster("body", { inside: false }));
+    applySession(
+      await companionPointerCluster("body", {
+        inside: false,
+        hold: hasQuickDraft.value,
+      }),
+    );
   } catch (err) {
     console.error("body cluster leave failed", err);
   }
 }
 
 async function onFocusIn() {
+  bodyFocused.value = true;
   if (!session.value?.hoverPreview) return;
   try {
-    applySession(await companionPointerCluster("body", { focused: true }));
+    applySession(
+      await companionPointerCluster("body", {
+        focused: true,
+        hold: hasQuickDraft.value,
+      }),
+    );
   } catch {
     // ignore
   }
 }
 
-async function onFocusOut() {
+async function onFocusOut(event: FocusEvent) {
+  const root = event.currentTarget as HTMLElement;
+  if (event.relatedTarget instanceof Node && root.contains(event.relatedTarget)) {
+    return;
+  }
+  bodyFocused.value = false;
   if (!session.value?.hoverPreview) return;
   try {
-    applySession(await companionPointerCluster("body", { focused: false }));
+    applySession(
+      await companionPointerCluster("body", {
+        focused: false,
+        hold: hasQuickDraft.value,
+      }),
+    );
   } catch {
     // ignore
   }
@@ -314,6 +347,20 @@ watch(shouldFocusQuickAdd, async (focus) => {
   if (!focus) return;
   await nextTick();
   quickInput.value?.focus();
+});
+
+watch(hasQuickDraft, async (hasDraft) => {
+  try {
+    applySession(
+      await companionPointerCluster("body", {
+        inside: pointerInside.value,
+        focused: bodyFocused.value,
+        hold: hasDraft,
+      }),
+    );
+  } catch {
+    // ignore
+  }
 });
 
 onMounted(async () => {

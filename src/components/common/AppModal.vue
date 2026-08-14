@@ -1,37 +1,61 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onUnmounted, watch } from "vue";
 
-const props = defineProps<{
-  open: boolean;
-  title: string;
-  /** 悬浮窗等窄容器：缩小最小宽度 */
-  compact?: boolean;
-  /** 默认 true；float 窗口内设 false，避免 Teleport 打断 hover */
-  teleport?: boolean;
-}>();
+import { registerModalEsc } from "@/composables/useModalEscStack";
+
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    title: string;
+    /** 悬浮窗等窄容器：缩小最小宽度 */
+    compact?: boolean;
+    /** 默认 true；float 窗口内设 false，避免 Teleport 打断 hover */
+    teleport?: boolean;
+    /** 默认 true；提交型对话框须传 false，避免点遮罩丢掉草稿 */
+    closeOnBackdrop?: boolean;
+  }>(),
+  {
+    teleport: true,
+    closeOnBackdrop: true,
+  },
+);
 
 const emit = defineEmits<{
   close: [];
 }>();
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape" && props.open) {
-    emit("close");
-  }
+let unregisterEsc: (() => void) | null = null;
+
+function emitClose() {
+  emit("close");
 }
 
-onMounted(() => {
-  window.addEventListener("keydown", onKeydown);
-});
+function onBackdropClick() {
+  if (!props.closeOnBackdrop) return;
+  emitClose();
+}
+
+watch(
+  () => props.open,
+  (isOpen) => {
+    unregisterEsc?.();
+    unregisterEsc = null;
+    if (isOpen) {
+      unregisterEsc = registerModalEsc(emitClose);
+    }
+  },
+  { immediate: true },
+);
 
 onUnmounted(() => {
-  window.removeEventListener("keydown", onKeydown);
+  unregisterEsc?.();
+  unregisterEsc = null;
 });
 </script>
 
 <template>
   <Teleport to="body" :disabled="teleport === false">
-    <div v-if="open" class="modal-backdrop" @click.self="emit('close')">
+    <div v-if="open" class="modal-backdrop" @click.self="onBackdropClick">
       <div
         class="modal"
         :class="{ compact }"
@@ -45,7 +69,7 @@ onUnmounted(() => {
             class="close-btn"
             type="button"
             :aria-label="$t('common.close')"
-            @click="emit('close')"
+            @click="emitClose"
           >
             ×
           </button>

@@ -77,14 +77,16 @@ pub fn companion_drag_ended(
     FloatHost::drag_ended(&app, which)
 }
 
+/// 悬停预览指针簇。`hold` 为快加草稿保活；inside/focused 仍如实写入。
 #[tauri::command]
 pub fn companion_pointer_cluster(
     app: AppHandle,
     surface: CompanionSurface,
     inside: Option<bool>,
     focused: Option<bool>,
+    hold: Option<bool>,
 ) -> Result<CompanionSession, AppError> {
-    FloatHost::pointer_cluster(&app, surface, inside, focused)
+    FloatHost::pointer_cluster(&app, surface, inside, focused, hold)
 }
 
 #[tauri::command]

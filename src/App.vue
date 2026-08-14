@@ -26,6 +26,7 @@ import ViewSidebar from "@/components/workbench/ViewSidebar.vue";
 import TaskListPane from "@/components/workbench/TaskListPane.vue";
 import TaskInspector from "@/components/workbench/TaskInspector.vue";
 import { TAURI_EVENTS } from "@/constants/events";
+import { modalEscDepth } from "@/composables/useModalEscStack";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
 import { applyAppearance } from "@/utils/appearance";
@@ -256,14 +257,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 function onGlobalKeydown(event: KeyboardEvent) {
   if (settingsOpen.value || createOpen.value) {
-    if (event.key === "Escape") {
-      settingsOpen.value = false;
-      createOpen.value = false;
-    }
     return;
   }
 
   if (event.key === "Escape") {
+    if (modalEscDepth() > 0) return;
     if (selectedId.value) {
       event.preventDefault();
       void closeDetail();
