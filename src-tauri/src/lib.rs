@@ -37,6 +37,7 @@ use infrastructure::database::Database;
 use infrastructure::filesystem;
 use infrastructure::notification::ensure_toast_registration;
 use repository::settings_repository::SettingsRepository;
+use repository::todo_repository::TodoRepository;
 use state::AppState;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -67,6 +68,11 @@ pub fn run() {
             ensure_toast_registration();
 
             let db = Database::new(app.handle())?;
+            // 幂等：JSON tags → tags / todo_tags（失败则阻止启动，避免筛选与展示不一致）
+            TodoRepository::backfill_normalized_tags(&db).map_err(|error| {
+                tracing::error!("tag normalize backfill failed: {error}");
+                error
+            })?;
             app.manage(AppState { db });
             app.manage(PendingNavigation(Mutex::new(None)));
             app.manage(FloatHost::new());

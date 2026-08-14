@@ -62,15 +62,19 @@ impl TodoService {
     }
 
     pub fn delete(db: &Database, id: &str) -> Result<(), AppError> {
-        TodoRepository::soft_delete(db, id)?;
-        ReminderRepository::disable_by_todo(db, id)?;
-        Ok(())
+        db.with_tx(|conn| {
+            TodoRepository::soft_delete_on(conn, id)?;
+            ReminderRepository::disable_by_todo_on(conn, id)?;
+            Ok(())
+        })
     }
 
     pub fn restore(db: &Database, id: &str) -> Result<TodoDto, AppError> {
-        let todo = TodoRepository::restore(db, id)?;
-        ReminderRepository::reenable_after_restore(db, id)?;
-        Ok(todo.into())
+        db.with_tx(|conn| {
+            let todo = TodoRepository::restore_on(conn, id)?;
+            ReminderRepository::reenable_after_restore_on(conn, id)?;
+            Ok(todo.into())
+        })
     }
 
     /// 含软删任务（回收站 Inspector）；update/transition 仍拒软删。

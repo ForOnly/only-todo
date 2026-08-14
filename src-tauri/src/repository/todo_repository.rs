@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json;
 use uuid::Uuid;
 
@@ -45,7 +45,7 @@ impl TodoRepository {
             deleted_at: None,
         };
 
-        db.with_conn(|conn| {
+        db.with_tx(|conn| {
             conn.execute(
                 "INSERT INTO todos (id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -99,7 +99,7 @@ impl TodoRepository {
                 message: error.to_string(),
             })?;
 
-        db.with_conn(|conn| {
+        db.with_tx(|conn| {
             conn.execute(
                 "UPDATE todos SET title = ?1, description = ?2, priority = ?3, due_date = ?4, tags = ?5, updated_at = ?6 WHERE id = ?7",
                 params![
@@ -122,17 +122,16 @@ impl TodoRepository {
         })
     }
 
-    pub fn soft_delete(db: &Database, id: &str) -> Result<(), AppError> {
+    pub(crate) fn soft_delete_on(conn: &Connection, id: &str) -> Result<(), AppError> {
         let now = Utc::now().to_rfc3339();
-        let rows = db.with_conn(|conn| {
-            conn.execute(
+        let rows = conn
+            .execute(
                 "UPDATE todos SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
                 params![now, id],
             )
             .map_err(|error| AppError::DbError {
                 message: error.to_string(),
-            })
-        })?;
+            })?;
 
         if rows == 0 {
             return Err(AppError::NotFound {
@@ -142,41 +141,42 @@ impl TodoRepository {
         Ok(())
     }
 
-    pub fn restore(db: &Database, id: &str) -> Result<Todo, AppError> {
+    pub(crate) fn restore_on(conn: &Connection, id: &str) -> Result<Todo, AppError> {
         let now = Utc::now().to_rfc3339();
-        let rows = db.with_conn(|conn| {
-            conn.execute(
+        let rows = conn
+            .execute(
                 "UPDATE todos SET deleted_at = NULL, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NOT NULL",
                 params![now, id],
             )
             .map_err(|error| AppError::DbError {
                 message: error.to_string(),
-            })
-        })?;
+            })?;
 
         if rows == 0 {
             return Err(AppError::NotFound {
                 message: format!("todo {id} not found or not deleted"),
             });
         }
-        Self::get_by_id(db, id)
+        Self::get_by_id_on(conn, id)
     }
 
     pub fn get_by_id(db: &Database, id: &str) -> Result<Todo, AppError> {
-        db.with_conn(|conn| {
-            conn.query_row(
-                "SELECT id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at
-                 FROM todos WHERE id = ?1",
-                params![id],
-                map_row,
-            )
-            .optional()
-            .map_err(|error| AppError::DbError {
-                message: error.to_string(),
-            })?
-            .ok_or_else(|| AppError::NotFound {
-                message: format!("todo {id} not found"),
-            })
+        db.with_conn(|conn| Self::get_by_id_on(conn, id))
+    }
+
+    pub(crate) fn get_by_id_on(conn: &Connection, id: &str) -> Result<Todo, AppError> {
+        conn.query_row(
+            "SELECT id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at
+             FROM todos WHERE id = ?1",
+            params![id],
+            map_row,
+        )
+        .optional()
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?
+        .ok_or_else(|| AppError::NotFound {
+            message: format!("todo {id} not found"),
         })
     }
 
@@ -290,23 +290,29 @@ impl TodoRepository {
 
     /// 将 todos.tags JSON 回填到规范化表（幂等）。
     pub fn backfill_normalized_tags(db: &Database) -> Result<(), AppError> {
-        db.with_conn(|conn| {
-            let mut stmt = conn
-                .prepare("SELECT id, tags FROM todos")
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            let rows = stmt
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            for row in rows {
-                let (id, json) = row.map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
+        db.with_tx(|conn| {
+            let snapshots = {
+                let mut stmt = conn
+                    .prepare("SELECT id, tags FROM todos")
+                    .map_err(|error| AppError::DbError {
+                        message: error.to_string(),
+                    })?;
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })
+                    .map_err(|error| AppError::DbError {
+                        message: error.to_string(),
+                    })?;
+                let mut snapshots = Vec::new();
+                for row in rows {
+                    snapshots.push(row.map_err(|error| AppError::DbError {
+                        message: error.to_string(),
+                    })?);
+                }
+                snapshots
+            };
+            for (id, json) in snapshots {
                 let tags: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
                 sync_todo_tags(conn, &id, &tags)?;
             }

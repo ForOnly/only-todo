@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
 use crate::domain::reminder::{
@@ -26,24 +26,25 @@ impl ReminderRepository {
         })
     }
 
-    /// 软删任务时禁用其提醒，避免周期项继续被 scheduler 推进
-    pub fn disable_by_todo(db: &Database, todo_id: &str) -> Result<(), AppError> {
+    /// 软删任务时禁用其提醒，避免周期项继续被 scheduler 推进。
+    pub(crate) fn disable_by_todo_on(conn: &Connection, todo_id: &str) -> Result<(), AppError> {
         let updated_at = Utc::now().to_rfc3339();
-        db.with_conn(|conn| {
-            conn.execute(
-                "UPDATE reminders SET enabled = 0, updated_at = ?1 WHERE todo_id = ?2 AND enabled = 1",
-                params![updated_at, todo_id],
-            )
-            .map_err(|error| AppError::DbError {
-                message: error.to_string(),
-            })?;
-            Ok(())
-        })
+        conn.execute(
+            "UPDATE reminders SET enabled = 0, updated_at = ?1 WHERE todo_id = ?2 AND enabled = 1",
+            params![updated_at, todo_id],
+        )
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+        Ok(())
     }
 
     /// 回收站恢复后重开提醒：未来的一次性/周期直接启用；已过期周期跳到下一槽；已过期一次性保持关闭。
-    pub fn reenable_after_restore(db: &Database, todo_id: &str) -> Result<(), AppError> {
-        let reminders = Self::list_by_todo(db, todo_id)?;
+    pub(crate) fn reenable_after_restore_on(
+        conn: &Connection,
+        todo_id: &str,
+    ) -> Result<(), AppError> {
+        let reminders = Self::list_by_todo_on(conn, todo_id)?;
         let now = Utc::now();
         for reminder in reminders {
             if reminder.enabled {
@@ -52,15 +53,15 @@ impl ReminderRepository {
             match reminder.repeat_type {
                 RepeatType::None => {
                     if reminder.next_trigger_at > now {
-                        Self::set_enabled(db, &reminder.id, true)?;
+                        Self::set_enabled_on(conn, &reminder.id, true)?;
                     }
                 }
                 RepeatType::Daily | RepeatType::Weekly => {
                     if reminder.next_trigger_at > now {
-                        Self::set_enabled(db, &reminder.id, true)?;
+                        Self::set_enabled_on(conn, &reminder.id, true)?;
                     } else {
                         // 在 trash 期间错过的周期槽：推进到未来并启用（不写 triggered 审计）
-                        Self::advance(db, &reminder)?;
+                        Self::advance_on(conn, &reminder)?;
                     }
                 }
             }
@@ -68,18 +69,16 @@ impl ReminderRepository {
         Ok(())
     }
 
-    fn set_enabled(db: &Database, id: &str, enabled: bool) -> Result<(), AppError> {
+    fn set_enabled_on(conn: &Connection, id: &str, enabled: bool) -> Result<(), AppError> {
         let updated_at = Utc::now().to_rfc3339();
-        db.with_conn(|conn| {
-            conn.execute(
-                "UPDATE reminders SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
-                params![enabled as i32, updated_at, id],
-            )
-            .map_err(|error| AppError::DbError {
-                message: error.to_string(),
-            })?;
-            Ok(())
-        })
+        conn.execute(
+            "UPDATE reminders SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
+            params![enabled as i32, updated_at, id],
+        )
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+        Ok(())
     }
 
     pub fn create(
@@ -192,28 +191,30 @@ impl ReminderRepository {
     }
 
     pub fn list_by_todo(db: &Database, todo_id: &str) -> Result<Vec<Reminder>, AppError> {
-        db.with_conn(|conn| {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, todo_id, remind_at, repeat_type, repeat_config, snooze_count, next_trigger_at, enabled, created_at, updated_at
-                     FROM reminders WHERE todo_id = ?1 ORDER BY next_trigger_at ASC",
-                )
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
+        db.with_conn(|conn| Self::list_by_todo_on(conn, todo_id))
+    }
 
-            let items = stmt
-                .query_map(params![todo_id], map_row)
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
+    fn list_by_todo_on(conn: &Connection, todo_id: &str) -> Result<Vec<Reminder>, AppError> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, todo_id, remind_at, repeat_type, repeat_config, snooze_count, next_trigger_at, enabled, created_at, updated_at
+                 FROM reminders WHERE todo_id = ?1 ORDER BY next_trigger_at ASC",
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
 
-            Ok(items)
-        })
+        let items = stmt
+            .query_map(params![todo_id], map_row)
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+
+        Ok(items)
     }
 
     pub fn find_due(db: &Database, now: &DateTime<Utc>) -> Result<Vec<DueReminder>, AppError> {
@@ -256,6 +257,10 @@ impl ReminderRepository {
 
     /// 推进下次触发时间：一次性禁用；周期则跳到严格大于 now 的下一槽，避免 downtime 后每 tick 刷屏。
     pub fn advance(db: &Database, reminder: &Reminder) -> Result<(), AppError> {
+        db.with_conn(|conn| Self::advance_on(conn, reminder))
+    }
+
+    fn advance_on(conn: &Connection, reminder: &Reminder) -> Result<(), AppError> {
         let now = Utc::now();
         let updated_at = now.to_rfc3339();
         let (enabled, next_trigger_at) = match reminder.repeat_type {
@@ -276,16 +281,14 @@ impl ReminderRepository {
             }
         };
 
-        db.with_conn(|conn| {
-            conn.execute(
-                "UPDATE reminders SET enabled = ?1, next_trigger_at = ?2, updated_at = ?3 WHERE id = ?4",
-                params![enabled, next_trigger_at, updated_at, reminder.id],
-            )
-            .map_err(|error| AppError::DbError {
-                message: error.to_string(),
-            })?;
-            Ok(())
-        })
+        conn.execute(
+            "UPDATE reminders SET enabled = ?1, next_trigger_at = ?2, updated_at = ?3 WHERE id = ?4",
+            params![enabled, next_trigger_at, updated_at, reminder.id],
+        )
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+        Ok(())
     }
 
     pub fn snooze(db: &Database, id: &str, minutes: i64) -> Result<Reminder, AppError> {
