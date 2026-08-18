@@ -25,7 +25,7 @@ async function bootstrap() {
   try {
     applyAppearance(await getSettings());
   } catch {
-    // settings 未就绪时保留 tokens 默认 light + zh-CN
+    // settings 未就绪时语言保持默认 zh-CN；主题由宿主 set_theme，不在此涂 DOM
   }
 
   app.mount("#app");

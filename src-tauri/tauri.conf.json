@@ -14,8 +14,10 @@
       {
         "label": "main",
         "title": "Only Todo",
-        "width": 1024,
-        "height": 768
+        "width": 960,
+        "height": 720,
+        "minWidth": 880,
+        "minHeight": 560
       },
       {
         "label": "float-chrome",

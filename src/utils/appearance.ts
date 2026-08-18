@@ -1,20 +1,9 @@
 /**
- * 三窗共用：根据 settings 应用主题与语言。
+ * 三窗共用：只应用语言。主题由宿主 set_theme，CSS 跟 prefers-color-scheme。
  */
 import type { SettingsDto } from "@/api/types";
 import { setI18nLocale } from "@/i18n";
-import { applyDocumentTheme, watchSystemTheme } from "@/utils/theme";
-import type { UiTheme } from "@/api/generated/UiTheme";
 
-let currentTheme: UiTheme = "system";
-let stopSystemWatch: (() => void) | null = null;
-
-export function applyAppearance(settings: Pick<SettingsDto, "uiTheme" | "uiLocale">): void {
-  currentTheme = settings.uiTheme;
-  applyDocumentTheme(settings.uiTheme);
+export function applyAppearance(settings: Pick<SettingsDto, "uiLocale">): void {
   setI18nLocale(settings.uiLocale);
-
-  if (!stopSystemWatch) {
-    stopSystemWatch = watchSystemTheme(() => currentTheme);
-  }
 }

@@ -4,9 +4,7 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager};
 
-use crate::domain::{
-    BodyView, ChromeKind, CompanionVisibility, DockEdge, PanelMode, WindowBounds,
-};
+use crate::domain::{BodyView, ChromeKind, CompanionVisibility, DockEdge, PanelMode, WindowBounds};
 use crate::errors::AppError;
 use crate::state::AppState;
 

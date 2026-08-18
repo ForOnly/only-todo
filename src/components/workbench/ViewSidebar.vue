@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import type { WorkbenchView } from "@/api/types";
-import { FOOTER_WORKBENCH_VIEWS, MAIN_WORKBENCH_VIEWS } from "@/constants/workbenchViews";
+import { LIBRARY_FOOTER_VIEWS, LIBRARY_MAIN_VIEWS } from "@/constants/workbenchViews";
 
 const props = defineProps<{
   view: WorkbenchView;
   activeTag: string | null;
   allTags: string[];
-  overdueCount?: number;
 }>();
 
 const emit = defineEmits<{
@@ -27,7 +26,7 @@ function isTagActive(tag: string): boolean {
     <div class="sidebar-scroll">
       <nav class="nav">
         <button
-          v-for="id in MAIN_WORKBENCH_VIEWS"
+          v-for="id in LIBRARY_MAIN_VIEWS"
           :key="id"
           type="button"
           class="nav-item"
@@ -35,13 +34,6 @@ function isTagActive(tag: string): boolean {
           @click="emit('selectView', id)"
         >
           <span>{{ $t(`views.${id}`) }}</span>
-          <span
-            v-if="id === 'overdue' && (overdueCount ?? 0) > 0"
-            class="badge"
-            :title="$t('views.overdueBadge', { count: overdueCount })"
-          >
-            {{ overdueCount }}
-          </span>
         </button>
       </nav>
 
@@ -53,6 +45,7 @@ function isTagActive(tag: string): boolean {
           type="button"
           class="nav-item tag"
           :class="{ active: isTagActive(tag) }"
+          :title="tag"
           @click="emit('selectView', 'tag', tag)"
         >
           {{ tag }}
@@ -62,7 +55,7 @@ function isTagActive(tag: string): boolean {
 
     <nav class="nav nav-footer">
       <button
-        v-for="id in FOOTER_WORKBENCH_VIEWS"
+        v-for="id in LIBRARY_FOOTER_VIEWS"
         :key="id"
         type="button"
         class="nav-item"
@@ -77,7 +70,7 @@ function isTagActive(tag: string): boolean {
 
 <style scoped>
 .view-sidebar {
-  width: 168px;
+  width: 184px;
   flex-shrink: 0;
   align-self: stretch;
   min-height: 0;
@@ -143,22 +136,6 @@ function isTagActive(tag: string): boolean {
   font-weight: 600;
 }
 
-.badge {
-  min-width: 18px;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  background: var(--color-danger);
-  color: var(--color-on-accent);
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.nav-item.active .badge {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
-}
-
 .tags-block {
   margin-top: 16px;
   padding-top: 12px;
@@ -167,14 +144,16 @@ function isTagActive(tag: string): boolean {
 
 .tags-title {
   margin: 0 0 6px 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--color-muted);
 }
 
 .nav-item.tag {
   color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 </style>

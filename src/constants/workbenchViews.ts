@@ -1,19 +1,28 @@
 import type { WorkbenchView } from "@/api/types";
 
-/** 侧栏主归类（不含标签、归档、回收站） */
-export const MAIN_WORKBENCH_VIEWS: WorkbenchView[] = [
-  "today",
-  "doing",
-  "overdue",
-  "done",
-  "all",
-];
+/** 库模式主列表（不含标签、归档、回收站） */
+export const LIBRARY_MAIN_VIEWS: WorkbenchView[] = ["all", "done"];
 
-/** 侧栏底栏：归档 / 回收站 */
-export const FOOTER_WORKBENCH_VIEWS: WorkbenchView[] = ["archived", "trash"];
+/** 库模式底栏：归档 / 回收站 */
+export const LIBRARY_FOOTER_VIEWS: WorkbenchView[] = ["archived", "trash"];
 
-/** 可作为启动默认归类的侧栏项（不含标签） */
+/** 打开主窗默认落点：焦点台或库内归类 */
 export const DEFAULT_VIEW_OPTIONS: WorkbenchView[] = [
-  ...MAIN_WORKBENCH_VIEWS,
-  ...FOOTER_WORKBENCH_VIEWS,
+  "today",
+  ...LIBRARY_MAIN_VIEWS,
+  ...LIBRARY_FOOTER_VIEWS,
 ];
+
+export function isLibraryView(view: WorkbenchView): boolean {
+  return (
+    view === "all" ||
+    view === "done" ||
+    view === "archived" ||
+    view === "trash" ||
+    view === "tag"
+  );
+}
+
+export function coerceDefaultView(view: WorkbenchView): WorkbenchView {
+  return DEFAULT_VIEW_OPTIONS.includes(view) ? view : "today";
+}

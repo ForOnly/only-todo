@@ -338,7 +338,8 @@ impl TodoRepository {
                     bind_values.push(status.as_str().to_string());
                 }
             }
-        } else if !query.include_archived.unwrap_or(false) && !query.include_deleted.unwrap_or(false)
+        } else if !query.include_archived.unwrap_or(false)
+            && !query.include_deleted.unwrap_or(false)
         {
             conditions.push("status != 'Archived'".to_string());
         }
@@ -441,13 +442,10 @@ fn sync_todo_tags(
     todo_id: &str,
     tags: &[String],
 ) -> Result<(), AppError> {
-    conn.execute(
-        "DELETE FROM todo_tags WHERE todo_id = ?1",
-        params![todo_id],
-    )
-    .map_err(|error| AppError::DbError {
-        message: error.to_string(),
-    })?;
+    conn.execute("DELETE FROM todo_tags WHERE todo_id = ?1", params![todo_id])
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
 
     let now = Utc::now().to_rfc3339();
     for tag in tags {

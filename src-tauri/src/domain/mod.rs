@@ -155,6 +155,32 @@ impl UiTheme {
             _ => Self::System,
         }
     }
+
+    /// 偏好 × OS → 实际浅/深。system 跟随 os，light/dark 钉死。
+    pub fn resolve(self, os: ColorScheme) -> ColorScheme {
+        match self {
+            Self::Light => ColorScheme::Light,
+            Self::Dark => ColorScheme::Dark,
+            Self::System => os,
+        }
+    }
+}
+
+/// 已解析的浅/深（运行时，不落库）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ColorScheme {
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct AppearanceDto {
+    pub preference: UiTheme,
+    pub resolved: ColorScheme,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -314,6 +340,8 @@ pub fn export_all_ts(out_dir: &std::path::Path) {
     crate::domain::todo::UpdateTodoDto::export_all().expect("export UpdateTodoDto");
     crate::domain::todo::ListTodoQuery::export_all().expect("export ListTodoQuery");
     crate::domain::todo::ListWorkbenchQuery::export_all().expect("export ListWorkbenchQuery");
+    crate::domain::todo::ListFocusBoardQuery::export_all().expect("export ListFocusBoardQuery");
+    crate::domain::todo::FocusBoardDto::export_all().expect("export FocusBoardDto");
     crate::domain::todo::PaginatedTodos::export_all().expect("export PaginatedTodos");
     crate::domain::reminder::ReminderDto::export_all().expect("export ReminderDto");
     crate::domain::reminder::CreateReminderDto::export_all().expect("export CreateReminderDto");
@@ -322,6 +350,8 @@ pub fn export_all_ts(out_dir: &std::path::Path) {
     SettingsDto::export_all().expect("export SettingsDto");
     UpdateSettingsDto::export_all().expect("export UpdateSettingsDto");
     UiTheme::export_all().expect("export UiTheme");
+    ColorScheme::export_all().expect("export ColorScheme");
+    AppearanceDto::export_all().expect("export AppearanceDto");
     UiLocale::export_all().expect("export UiLocale");
     CompanionSession::export_all().expect("export CompanionSession");
     CompanionDragEndResult::export_all().expect("export CompanionDragEndResult");
@@ -342,6 +372,8 @@ export type { CreateTodoDto } from "./CreateTodoDto";
 export type { UpdateTodoDto } from "./UpdateTodoDto";
 export type { ListTodoQuery } from "./ListTodoQuery";
 export type { ListWorkbenchQuery } from "./ListWorkbenchQuery";
+export type { ListFocusBoardQuery } from "./ListFocusBoardQuery";
+export type { FocusBoardDto } from "./FocusBoardDto";
 export type { WorkbenchView } from "./WorkbenchView";
 export type { PaginatedTodos } from "./PaginatedTodos";
 export type { TodoStatus } from "./TodoStatus";
@@ -354,6 +386,8 @@ export type { StatusActionDto } from "./StatusActionDto";
 export type { SettingsDto } from "./SettingsDto";
 export type { UpdateSettingsDto } from "./UpdateSettingsDto";
 export type { UiTheme } from "./UiTheme";
+export type { ColorScheme } from "./ColorScheme";
+export type { AppearanceDto } from "./AppearanceDto";
 export type { UiLocale } from "./UiLocale";
 export type { CompanionSession } from "./CompanionSession";
 export type { CompanionDragEndResult } from "./CompanionDragEndResult";
@@ -370,4 +404,3 @@ export type { ListEventsQuery } from "./ListEventsQuery";
 "#;
     std::fs::write(out_dir.join("index.ts"), index).expect("write generated index");
 }
-

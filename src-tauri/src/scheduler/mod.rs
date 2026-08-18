@@ -138,10 +138,12 @@ fn record_notify_failure(reminder_id: &str) -> bool {
     let Ok(mut map) = NOTIFY_BACKOFF.lock() else {
         return false;
     };
-    let entry = map.entry(reminder_id.to_string()).or_insert(NotifyBackoffEntry {
-        failures: 0,
-        retry_after: Instant::now(),
-    });
+    let entry = map
+        .entry(reminder_id.to_string())
+        .or_insert(NotifyBackoffEntry {
+            failures: 0,
+            retry_after: Instant::now(),
+        });
     entry.failures = entry.failures.saturating_add(1);
     let shift = entry.failures.saturating_sub(1).min(8);
     let backoff = NOTIFY_BACKOFF_BASE

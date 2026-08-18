@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
-import type { SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
+import type { FocusBoardDto, SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
 import { formatDueDate, isOverdue } from "@/utils/date";
 import { sortKeysForView } from "@/utils/listSort";
 
 const props = defineProps<{
   todos: TodoDto[];
+  focusBoard: FocusBoardDto;
   selectedId: string | null;
   loading: boolean;
   total: number;
@@ -19,6 +20,10 @@ const props = defineProps<{
   activeTag: string | null;
   sortBy: SortBy;
   sortOrder: SortOrder;
+  grouped: boolean;
+  searching: boolean;
+  showInlineAdd: boolean;
+  inlinePlaceholder: string;
 }>();
 
 const emit = defineEmits<{
@@ -28,10 +33,17 @@ const emit = defineEmits<{
   nextPage: [];
   changeSort: [sortBy: SortBy];
   toggleSortOrder: [];
-  emptyAction: [action: "create" | "all"];
+  quickAdd: [title: string];
 }>();
 
 const { t } = useI18n();
+const quickTitle = ref("");
+
+interface ListGroup {
+  id: string;
+  title: string | null;
+  items: TodoDto[];
+}
 
 const sortOptions = computed(() => sortKeysForView(props.view));
 
@@ -45,6 +57,8 @@ const sortByModel = computed({
 });
 
 const viewTitle = computed(() => {
+  if (props.searching) return t("list.searchTitle");
+  if (props.grouped) return t("modes.focus");
   if (props.view === "tag" && props.activeTag) {
     return t("views.tagTitle", { tag: props.activeTag });
   }
@@ -52,26 +66,16 @@ const viewTitle = computed(() => {
 });
 
 const emptyCopy = computed(() => {
+  if (props.searching) {
+    return { title: t("list.empty.searchTitle"), hint: t("list.empty.searchHint") };
+  }
+  if (props.grouped) {
+    return {
+      title: t("list.empty.focusTitle"),
+      hint: t("list.empty.focusHint"),
+    };
+  }
   switch (props.view) {
-    case "today":
-      return {
-        title: t("list.empty.todayTitle"),
-        hint: t("list.empty.todayHint"),
-        cta: "create" as const,
-        ctaLabel: t("list.empty.todayCta"),
-      };
-    case "overdue":
-      return {
-        title: t("list.empty.overdueTitle"),
-        hint: t("list.empty.overdueHint"),
-        cta: "all" as const,
-      };
-    case "doing":
-      return {
-        title: t("list.empty.doingTitle"),
-        hint: t("list.empty.doingHint"),
-        cta: "all" as const,
-      };
     case "trash":
       return { title: t("list.empty.trashTitle"), hint: t("list.empty.trashHint") };
     case "archived":
@@ -82,14 +86,25 @@ const emptyCopy = computed(() => {
       return {
         title: t("list.empty.defaultTitle"),
         hint: t("list.empty.defaultHint"),
-        cta: "create" as const,
-        ctaLabel: t("list.empty.defaultCta"),
       };
   }
 });
 
+const groups = computed<ListGroup[]>(() => {
+  if (props.grouped && !props.searching) {
+    return [
+      { id: "overdue", title: t("focus.overdue"), items: props.focusBoard.overdue },
+      { id: "doing", title: t("focus.doing"), items: props.focusBoard.doing },
+      { id: "dueToday", title: t("focus.dueToday"), items: props.focusBoard.dueToday },
+    ].filter((group) => group.items.length > 0);
+  }
+  if (props.todos.length === 0) return [];
+  return [{ id: "flat", title: null, items: props.todos }];
+});
+
 const showLoadingHint = computed(() => props.loading && props.todos.length === 0);
 const isRefreshing = computed(() => props.loading && props.todos.length > 0);
+const showPagination = computed(() => !props.grouped && props.total > props.pageSize);
 
 function canToggle(todo: TodoDto): boolean {
   return !todo.deletedAt && (todo.status === "Todo" || todo.status === "Doing" || todo.status === "Done");
@@ -103,6 +118,21 @@ function onCheck(todo: TodoDto, event: Event) {
   event.stopPropagation();
   if (!canToggle(todo)) return;
   emit("toggleComplete", todo);
+}
+
+function visibleTags(todo: TodoDto): string[] {
+  return todo.tags.slice(0, 2);
+}
+
+function extraTagCount(todo: TodoDto): number {
+  return Math.max(0, todo.tags.length - 2);
+}
+
+function submitQuickAdd() {
+  const title = quickTitle.value.trim();
+  if (!title) return;
+  emit("quickAdd", title);
+  quickTitle.value = "";
 }
 </script>
 
@@ -133,64 +163,68 @@ function onCheck(todo: TodoDto, event: Event) {
     <div v-if="showLoadingHint" class="hint">{{ $t("common.loading") }}</div>
 
     <ul v-else class="todo-list" :class="{ refreshing: isRefreshing }">
-      <li v-if="todos.length === 0" class="empty">
+      <li v-if="showInlineAdd" class="quick-add">
+        <input
+          id="workbench-quick-add"
+          v-model="quickTitle"
+          type="text"
+          maxlength="200"
+          :placeholder="inlinePlaceholder"
+          @keydown.enter.prevent="submitQuickAdd"
+        />
+      </li>
+
+      <li v-if="groups.length === 0" class="empty">
         <p class="empty-title">{{ emptyCopy.title }}</p>
         <p class="empty-hint">{{ emptyCopy.hint }}</p>
-        <div v-if="emptyCopy.cta" class="empty-actions">
-          <AppButton
-            v-if="emptyCopy.cta === 'create'"
-            variant="primary"
-            @click="emit('emptyAction', 'create')"
-          >
-            {{ emptyCopy.ctaLabel }}
-          </AppButton>
-          <AppButton v-else variant="ghost" @click="emit('emptyAction', 'all')">
-            {{ $t("list.viewAll") }}
-          </AppButton>
-        </div>
       </li>
 
-      <li
-        v-for="todo in todos"
-        :key="todo.id"
-        class="todo-item"
-        :class="{
-          active: todo.id === selectedId,
-          done: todo.status === 'Done',
-          overdue: isOverdue(todo.dueDate, todo.status),
-        }"
-        @click="onRowClick(todo)"
-      >
-        <span class="priority-bar" :data-priority="todo.priority" />
-        <input
-          class="check"
-          type="checkbox"
-          :checked="todo.status === 'Done'"
-          :disabled="!canToggle(todo)"
-          :aria-label="todo.status === 'Done' ? $t('list.markUndone') : $t('list.markDone')"
-          @click="onCheck(todo, $event)"
-        />
-        <div class="body">
-          <div class="title-row">
-            <span class="title">{{ todo.title }}</span>
-            <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+      <template v-for="group in groups" :key="group.id">
+        <li v-if="group.title" class="group-head">{{ group.title }}</li>
+        <li
+          v-for="todo in group.items"
+          :key="todo.id"
+          class="todo-item"
+          tabindex="0"
+          :class="{
+            active: todo.id === selectedId,
+            done: todo.status === 'Done',
+          }"
+          @click="onRowClick(todo)"
+          @keydown.enter.prevent="onRowClick(todo)"
+        >
+          <span class="priority-bar" :data-priority="todo.priority" />
+          <input
+            class="check"
+            type="checkbox"
+            :checked="todo.status === 'Done'"
+            :disabled="!canToggle(todo)"
+            :aria-label="todo.status === 'Done' ? $t('list.markUndone') : $t('list.markDone')"
+            @click="onCheck(todo, $event)"
+          />
+          <div class="body">
+            <div class="title-row">
+              <span class="title">{{ todo.title }}</span>
+              <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+            </div>
+            <div v-if="todo.dueDate || todo.tags.length" class="meta">
+              <span
+                v-if="todo.dueDate"
+                :class="{ 'due-overdue': isOverdue(todo.dueDate, todo.status) }"
+              >
+                {{ formatDueDate(todo.dueDate) }}
+              </span>
+              <span v-for="tag in visibleTags(todo)" :key="tag" class="chip">{{ tag }}</span>
+              <span v-if="extraTagCount(todo)" class="chip more">
+                {{ $t("list.moreTags", { n: extraTagCount(todo) }) }}
+              </span>
+            </div>
           </div>
-          <div class="meta">
-            <span class="priority">{{ $t(`priority.${todo.priority}`) }}</span>
-            <span>{{ $t(`status.${todo.status}`) }}</span>
-            <span
-              v-if="todo.dueDate"
-              :class="{ 'due-overdue': isOverdue(todo.dueDate, todo.status) }"
-            >
-              {{ formatDueDate(todo.dueDate) }}
-            </span>
-            <span v-for="tag in todo.tags" :key="tag" class="chip">{{ tag }}</span>
-          </div>
-        </div>
-      </li>
+        </li>
+      </template>
     </ul>
 
-    <footer v-if="view !== 'today' && total > pageSize" class="pagination">
+    <footer v-if="showPagination" class="pagination">
       <AppButton :disabled="page <= 1" @click="emit('prevPage')">{{ $t("list.prevPage") }}</AppButton>
       <span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span>
       <AppButton :disabled="page * pageSize >= total" @click="emit('nextPage')">
@@ -207,7 +241,6 @@ function onCheck(todo: TodoDto, event: Event) {
   flex: 1;
   min-width: 0;
   background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
 }
 
 .list-header {
@@ -287,12 +320,44 @@ function onCheck(todo: TodoDto, event: Event) {
   opacity: 0.72;
 }
 
+.group-head {
+  padding: 12px 16px 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.quick-add {
+  padding: 8px 16px 8px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.quick-add input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  padding: 6px 0;
+  box-sizing: border-box;
+}
+
+.quick-add input:focus {
+  outline: none;
+}
+
+.quick-add input::placeholder {
+  color: var(--color-muted);
+}
+
 .todo-item {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 12px 16px 12px 14px;
+  padding: 10px 16px 10px 14px;
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -306,8 +371,9 @@ function onCheck(todo: TodoDto, event: Event) {
   background: var(--color-accent-soft);
 }
 
-.todo-item.overdue .title {
-  color: var(--color-overdue);
+.todo-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .todo-item.done .title {
@@ -338,9 +404,34 @@ function onCheck(todo: TodoDto, event: Event) {
 }
 
 .check {
+  appearance: none;
+  width: 16px;
+  height: 16px;
   margin-top: 3px;
   flex-shrink: 0;
   cursor: pointer;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-surface);
+}
+
+.check:checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='white' stroke-width='2' d='M3 8.5 6.5 12 13 4'/></svg>");
+  background-size: 12px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.check:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.check:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .body {
@@ -392,6 +483,11 @@ function onCheck(todo: TodoDto, event: Event) {
   color: var(--color-text-secondary);
 }
 
+.chip.more {
+  background: transparent;
+  color: var(--color-muted);
+}
+
 .empty {
   padding: 48px 24px;
   text-align: center;
@@ -405,15 +501,9 @@ function onCheck(todo: TodoDto, event: Event) {
 }
 
 .empty-hint {
-  margin: 0 0 16px;
+  margin: 0;
   font-size: 13px;
   color: var(--color-muted);
-}
-
-.empty-actions {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
 }
 
 .pagination {

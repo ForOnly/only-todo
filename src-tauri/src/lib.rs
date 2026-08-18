@@ -1,8 +1,9 @@
+mod appearance;
+mod broadcast;
 mod commands;
 pub mod domain;
 mod errors;
 mod events;
-mod broadcast;
 mod float;
 mod infrastructure;
 mod repository;
@@ -19,10 +20,11 @@ use commands::{
     reminder::{
         create_reminder, delete_reminder, list_reminders, snooze_reminder, update_reminder,
     },
-    settings::{get_settings, update_settings},
+    settings::{get_appearance, get_settings, update_settings},
     todo::{
-        create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags, list_todos,
-        list_workbench_todos, restore_todo, transition_todo, update_todo,
+        create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags,
+        list_focus_board, list_todos, list_workbench_todos, restore_todo, transition_todo,
+        update_todo,
     },
     window::{
         companion_click_chrome, companion_collapse_to_strip, companion_drag_ended,
@@ -77,9 +79,20 @@ pub fn run() {
             app.manage(PendingNavigation(Mutex::new(None)));
             app.manage(FloatHost::new());
 
+            let ui_theme = SettingsRepository::get(&app.state::<AppState>().db)
+                .map(|settings| settings.ui_theme)
+                .unwrap_or(domain::UiTheme::System);
+            let os = appearance::query_os_theme(app.handle(), None);
+            let host = appearance::AppearanceHost::new(ui_theme, os);
+            let resolved = host.snapshot().resolved;
+            app.manage(host);
+            // 尽早钉 theme，降低 WebView 第一帧 FOUC；窗口均来自 tauri.conf
+            appearance::apply_theme_to_all_windows(app.handle(), resolved);
+
             setup_tray(app.handle())?;
             setup_main_window(app.handle())?;
             setup_companion_windows(app.handle())?;
+            appearance::apply_theme_to_all_windows(app.handle(), resolved);
             apply_startup_windows(app.handle())?;
             float::update_tray_tooltip(app.handle());
             scheduler::start(app.handle().clone());
@@ -95,6 +108,7 @@ pub fn run() {
             get_todo,
             list_todos,
             list_workbench_todos,
+            list_focus_board,
             list_all_tags,
             get_allowed_transitions,
             transition_todo,
@@ -104,6 +118,7 @@ pub fn run() {
             list_reminders,
             snooze_reminder,
             get_settings,
+            get_appearance,
             update_settings,
             list_events_cmd,
             hide_to_tray,
@@ -121,6 +136,11 @@ pub fn run() {
             companion_pointer_cluster,
             companion_open_view,
         ])
+        .on_window_event(|window, event| {
+            if let WindowEvent::ThemeChanged(theme) = event {
+                appearance::on_os_theme_signal(window.app_handle(), *theme);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

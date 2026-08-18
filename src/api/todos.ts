@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   CreateTodoDto,
+  FocusBoardDto,
+  ListFocusBoardQuery,
   ListTodoQuery,
   ListWorkbenchQuery,
   PaginatedTodos,
@@ -61,6 +63,18 @@ export async function listWorkbenchTodos(
     page: result.page,
     pageSize: result.pageSize,
   };
+}
+
+/** Tauri Command: list_focus_board */
+export async function listFocusBoard(
+  query: Partial<ListFocusBoardQuery> = {},
+): Promise<FocusBoardDto> {
+  return invoke("list_focus_board", {
+    query: {
+      sortBy: query.sortBy ?? "priority",
+      sortOrder: query.sortOrder ?? "desc",
+    },
+  });
 }
 
 /** Tauri Command: transition_todo */

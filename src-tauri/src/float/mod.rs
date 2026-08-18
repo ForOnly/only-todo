@@ -1,9 +1,9 @@
 pub mod geometry;
-pub mod surfaces;
-pub mod session;
-pub mod persistence;
-pub mod window_ops;
 pub mod host;
+pub mod persistence;
+pub mod session;
+pub mod surfaces;
+pub mod window_ops;
 
 pub use host::FloatHost;
 pub use session::snapshot;

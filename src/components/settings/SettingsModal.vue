@@ -14,7 +14,7 @@ import type {
   UpdateSettingsDto,
   WorkbenchView,
 } from "@/api/types";
-import { DEFAULT_VIEW_OPTIONS } from "@/constants/workbenchViews";
+import { DEFAULT_VIEW_OPTIONS, coerceDefaultView } from "@/constants/workbenchViews";
 import { confirm } from "@/composables/useAppConfirm";
 import { parseListDefaultSort, serializeListDefaultSort } from "@/utils/listSort";
 
@@ -54,9 +54,7 @@ const localTheme = ref<UiTheme>(props.uiTheme);
 const localLocale = ref<UiLocale>(props.uiLocale);
 const localSortBy = ref<SortBy>("priority");
 const localSortOrder = ref<SortOrder>("desc");
-const localDefaultView = ref<WorkbenchView>(
-  props.listDefaultView === "tag" ? "today" : props.listDefaultView,
-);
+const localDefaultView = ref<WorkbenchView>(coerceDefaultView(props.listDefaultView));
 const closing = ref(false);
 const baseline = ref("");
 
@@ -104,7 +102,10 @@ const localeOptions = computed(() => [
   { value: "en-US", label: t("settings.langEn") },
 ]);
 const viewOptions = computed(() =>
-  DEFAULT_VIEW_OPTIONS.map((id) => ({ value: id, label: t(`views.${id}`) })),
+  DEFAULT_VIEW_OPTIONS.map((id) => ({
+    value: id,
+    label: id === "today" ? t("modes.focus") : t(`views.${id}`),
+  })),
 );
 const sortByOptions = computed(() => [
   { value: "priority", label: t("sort.priority") },
@@ -135,8 +136,7 @@ watch(
       localAutostart.value = props.autostartEnabled;
       localTheme.value = props.uiTheme;
       localLocale.value = props.uiLocale;
-      localDefaultView.value =
-        props.listDefaultView === "tag" ? "today" : props.listDefaultView;
+      localDefaultView.value = coerceDefaultView(props.listDefaultView);
       const sort = parseListDefaultSort(props.listDefaultSort);
       localSortBy.value = sort.sortBy;
       localSortOrder.value = sort.sortOrder;

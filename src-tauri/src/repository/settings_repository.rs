@@ -1,10 +1,10 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::domain::todo::WorkbenchView;
 use crate::domain::{
     CompanionPlacement, DockEdge, HomeShape, SettingsDto, UiLocale, UiTheme, UpdateSettingsDto,
     WindowBounds,
 };
-use crate::domain::todo::WorkbenchView;
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
@@ -16,8 +16,7 @@ impl SettingsRepository {
     }
 
     fn get_on(conn: &Connection) -> Result<SettingsDto, AppError> {
-        let notification_enabled =
-            Self::get_bool_on(conn, "notification.enabled")?.unwrap_or(true);
+        let notification_enabled = Self::get_bool_on(conn, "notification.enabled")?.unwrap_or(true);
         let list_default_sort = Self::get_value_on(conn, "list.default_sort")?
             .unwrap_or_else(|| r#"{"sort_by":"priority","sort_order":"desc"}"#.into());
         let list_default_view = Self::get_value_on(conn, "list.default_view")?

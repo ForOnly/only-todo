@@ -9,8 +9,8 @@ use super::geometry::{
     current_window_bounds, inner_window_size, panel_from_ball, snap_ball_to_work_area,
     snap_handle_to_work_area, work_area_logical, HANDLE_HEIGHT,
 };
-use super::surfaces::{apply_position, body_window, chrome_window};
 use super::session::{app_state, host_state, lock_runtime};
+use super::surfaces::{apply_position, body_window, chrome_window};
 
 pub(crate) fn free_body_bounds(
     app: &AppHandle,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 
 import type {
@@ -13,7 +13,7 @@ import type {
   UiTheme,
   WorkbenchView,
 } from "@/api/types";
-import { listAllTags, listTodos, getTodo, transitionTodo } from "@/api/todos";
+import { listAllTags, getTodo, transitionTodo } from "@/api/todos";
 import { listEvents } from "@/api/events";
 import { getSettings, updateSettings } from "@/api/settings";
 import type { EventDto } from "@/api/types";
@@ -26,22 +26,26 @@ import TaskListPane from "@/components/workbench/TaskListPane.vue";
 import TaskInspector from "@/components/workbench/TaskInspector.vue";
 import ActivityStrip from "@/components/workbench/ActivityStrip.vue";
 import { TAURI_EVENTS } from "@/constants/events";
+import { coerceDefaultView, isLibraryView } from "@/constants/workbenchViews";
 import { modalEscDepth } from "@/composables/useModalEscStack";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
 import { applyAppearance } from "@/utils/appearance";
-import { dueDateRangeForFilter, localTodayDueInput } from "@/utils/date";
+import { fromLocalDatetimeInput, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 import { parseListDefaultSort } from "@/utils/listSort";
 
 const {
   todos,
+  focusBoard,
   total,
   page,
   pageSize,
   loading,
   error: listError,
   keyword,
+  searchActive,
+  mode,
   view,
   activeTag,
   sortBy,
@@ -50,9 +54,11 @@ const {
   fetchTodos,
   createTodo,
   selectTodo,
+  setMode,
   setView,
   setSort,
   search,
+  clearSearch,
   goToPage,
 } = useTodos();
 
@@ -86,7 +92,6 @@ const {
   restore,
 } = useTodoDetail(selectedId, async () => {
   await fetchTodos();
-  await refreshOverdueCount();
   await loadTags();
   await loadRecentEvents();
 });
@@ -109,11 +114,16 @@ const autostartEnabled = ref(false);
 const uiTheme = ref<UiTheme>("system");
 const uiLocale = ref<UiLocale>("zh-CN");
 const allTags = ref<string[]>([]);
-const overdueCount = ref(0);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
 const eventUnlisteners: (() => void)[] = [];
+
+const showQuickAdd = computed(() => {
+  if (searchActive.value) return false;
+  if (mode.value === "focus") return true;
+  return view.value === "all" || view.value === "tag";
+});
 
 /** 同步设置到本地状态；不切换侧栏 view（避免主题/语言保存时跳视图） */
 async function loadAndApplySettings() {
@@ -121,7 +131,7 @@ async function loadAndApplySettings() {
     const settings = await getSettings();
     notificationEnabled.value = settings.notificationEnabled;
     listDefaultSortRaw.value = settings.listDefaultSort;
-    listDefaultView.value = settings.listDefaultView;
+    listDefaultView.value = coerceDefaultView(settings.listDefaultView);
     floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
     floatVisibleCount.value = settings.floatVisibleCount;
     floatAutoShow.value = settings.floatAutoShow;
@@ -139,17 +149,25 @@ async function loadAndApplySettings() {
   }
 }
 
+function applyColdStartView() {
+  const next = coerceDefaultView(listDefaultView.value);
+  listDefaultView.value = next;
+  if (isLibraryView(next)) {
+    mode.value = "library";
+    view.value = next;
+  } else {
+    mode.value = "focus";
+    view.value = "today";
+  }
+  activeTag.value = null;
+}
+
 onMounted(async () => {
   await loadAndApplySettings();
-  // 仅冷启动应用默认归类；后端 from_settings_str 已排除 tag，此处再防一层
-  if (listDefaultView.value !== "tag") {
-    view.value = listDefaultView.value;
-    activeTag.value = null;
-  }
+  applyColdStartView();
 
   await fetchTodos();
   await loadTags();
-  await refreshOverdueCount();
   await loadRecentEvents();
 
   eventUnlisteners.push(
@@ -186,7 +204,6 @@ onMounted(async () => {
         todosChangedTimer = null;
         void (async () => {
           await fetchTodos();
-          await refreshOverdueCount();
           await loadTags();
           await loadRecentEvents();
           if (!selectedId.value || saving.value) return;
@@ -227,21 +244,6 @@ async function loadTags() {
   }
 }
 
-async function refreshOverdueCount() {
-  try {
-    const dueRange = dueDateRangeForFilter("overdue");
-    const result = await listTodos({
-      status: ["Todo", "Doing"],
-      dueDateBefore: dueRange.before,
-      page: 1,
-      pageSize: 1,
-    });
-    overdueCount.value = result.total;
-  } catch {
-    overdueCount.value = 0;
-  }
-}
-
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
@@ -272,7 +274,12 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
   if (event.key === "n") {
     event.preventDefault();
-    openCreateModal();
+    const quickAdd = document.getElementById("workbench-quick-add");
+    if (quickAdd) {
+      quickAdd.focus();
+    } else {
+      openCreateModal();
+    }
     return;
   }
 
@@ -309,22 +316,22 @@ async function navigateToTodo(id: string | null) {
   try {
     const todo = await getTodo(id);
     if (todo.deletedAt) {
-      if (view.value !== "trash") {
-        view.value = "trash";
-        activeTag.value = null;
-        page.value = 1;
-        await fetchTodos();
-      } else if (!todos.value.some((item) => item.id === id)) {
-        await fetchTodos();
-      }
+      mode.value = "library";
+      view.value = "trash";
+      activeTag.value = null;
+      searchActive.value = false;
+      page.value = 1;
+      await fetchTodos();
     } else if (!todos.value.some((item) => item.id === id)) {
-      // 当前视图可能筛掉该任务；切到「全部」再定位（与恢复后导航一致）
-      if (view.value !== "all" || activeTag.value) {
+      await fetchTodos();
+      if (!todos.value.some((item) => item.id === id)) {
+        mode.value = "library";
         view.value = "all";
         activeTag.value = null;
+        searchActive.value = false;
         page.value = 1;
+        await fetchTodos();
       }
-      await fetchTodos();
     }
   } catch {
     // get 失败仍尝试选中，由 Inspector 展示错误
@@ -360,7 +367,6 @@ async function handleToggleComplete(todo: TodoDto) {
       await reload();
     }
     await fetchTodos();
-    await refreshOverdueCount();
   } catch (err) {
     listError.value = formatErrorMessage(err);
   }
@@ -369,7 +375,6 @@ async function handleToggleComplete(todo: TodoDto) {
 async function handleRemove() {
   const ok = await remove();
   if (ok) {
-    await refreshOverdueCount();
     await loadTags();
   }
 }
@@ -378,12 +383,13 @@ async function handleRestore() {
   const restoredId = selectedId.value;
   const ok = await restore();
   if (ok && restoredId) {
+    mode.value = "library";
     view.value = "all";
     activeTag.value = null;
+    searchActive.value = false;
     page.value = 1;
     await fetchTodos();
     await selectTodo(restoredId);
-    await refreshOverdueCount();
     await loadTags();
   }
 }
@@ -395,17 +401,31 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
     createInitialDue.value = null;
     createModalRef.value?.resetSubmitting();
     await loadTags();
-    await refreshOverdueCount();
-    // 今日视图创建但未带 due 时可能不在列表；稳妥切全部并选中
-    if (view.value === "today" && !todos.value.some((item) => item.id === created.id)) {
+    if (!todos.value.some((item) => item.id === created.id)) {
+      mode.value = "library";
       view.value = "all";
       activeTag.value = null;
+      searchActive.value = false;
       page.value = 1;
       await fetchTodos();
       await selectTodo(created.id);
     }
   } catch (err) {
     createModalRef.value?.setError(formatErrorMessage(err));
+  }
+}
+
+async function handleQuickAdd(title: string) {
+  try {
+    const dto: CreateTodoDto = { title };
+    if (mode.value === "focus") {
+      const due = fromLocalDatetimeInput(localTodayDueInput());
+      if (due) dto.dueDate = due;
+    }
+    await createTodo(dto);
+    await loadTags();
+  } catch (err) {
+    listError.value = formatErrorMessage(err);
   }
 }
 
@@ -449,6 +469,12 @@ async function handleSnoozeReminder(id: string, minutes: number) {
   }
 }
 
+async function handleModeChange(next: typeof mode.value) {
+  if (!(await flushAutosave())) return;
+  selectedId.value = null;
+  setMode(next);
+}
+
 async function handleViewSelect(next: WorkbenchView, tag?: string | null) {
   if (!(await flushAutosave())) return;
   setView(next, tag);
@@ -464,14 +490,6 @@ function handleToggleSortOrder() {
   setSort(sortBy.value, flipped);
 }
 
-function handleEmptyAction(action: "create" | "all") {
-  if (action === "create") {
-    openCreateModal({ dueToday: view.value === "today" });
-  } else {
-    setView("all");
-  }
-}
-
 async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0]) {
   settingsSaving.value = true;
   settingsError.value = null;
@@ -479,7 +497,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
     const settings = await updateSettings(payload);
     notificationEnabled.value = settings.notificationEnabled;
     listDefaultSortRaw.value = settings.listDefaultSort;
-    listDefaultView.value = settings.listDefaultView;
+    listDefaultView.value = coerceDefaultView(settings.listDefaultView);
     floatAlwaysOnTop.value = settings.floatAlwaysOnTop;
     floatVisibleCount.value = settings.floatVisibleCount;
     floatAutoShow.value = settings.floatAutoShow;
@@ -507,8 +525,10 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   <div class="app">
     <AppHeader
       v-model:keyword="keyword"
+      :mode="mode"
+      @update:mode="handleModeChange"
       @search="search"
-      @create="openCreateModal"
+      @clear-search="clearSearch"
       @settings="
         settingsError = null;
         settingsOpen = true;
@@ -517,34 +537,45 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
 
     <div class="body">
       <ViewSidebar
+        v-if="mode === 'library' && !searchActive"
         :view="view"
         :active-tag="activeTag"
         :all-tags="allTags"
-        :overdue-count="overdueCount"
         @select-view="handleViewSelect"
       />
 
-      <TaskListPane
-        :todos="todos"
-        :selected-id="selectedId"
-        :loading="loading"
-        :total="total"
-        :page="page"
-        :page-size="pageSize"
-        :view="view"
-        :active-tag="activeTag"
-        :sort-by="sortBy"
-        :sort-order="sortOrder"
-        @select="handleSelect"
-        @toggle-complete="handleToggleComplete"
-        @prev-page="goToPage(page - 1)"
-        @next-page="goToPage(page + 1)"
-        @change-sort="handleChangeSort"
-        @toggle-sort-order="handleToggleSortOrder"
-        @empty-action="handleEmptyAction"
-      />
+      <div class="main-col">
+        <p v-if="listError" class="list-error">{{ listError }}</p>
+        <TaskListPane
+          :todos="todos"
+          :focus-board="focusBoard"
+          :selected-id="selectedId"
+          :loading="loading"
+          :total="total"
+          :page="page"
+          :page-size="pageSize"
+          :view="view"
+          :active-tag="activeTag"
+          :sort-by="sortBy"
+          :sort-order="sortOrder"
+          :grouped="mode === 'focus' && !searchActive"
+          :searching="searchActive"
+          :show-inline-add="showQuickAdd"
+          :inline-placeholder="
+            mode === 'focus' ? $t('list.inlineAddFocus') : $t('list.inlineAddLibrary')
+          "
+          @select="handleSelect"
+          @toggle-complete="handleToggleComplete"
+          @prev-page="goToPage(page - 1)"
+          @next-page="goToPage(page + 1)"
+          @change-sort="handleChangeSort"
+          @toggle-sort-order="handleToggleSortOrder"
+          @quick-add="handleQuickAdd"
+        />
+      </div>
 
       <TaskInspector
+        v-if="selectedId"
         :detail="detail"
         v-model:edit-title="editTitle"
         v-model:edit-description="editDescription"
@@ -570,9 +601,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       />
     </div>
 
-    <p v-if="listError" class="global-error">{{ listError }}</p>
-
-    <ActivityStrip :events="recentEvents" />
+    <ActivityStrip v-if="mode === 'library'" :events="recentEvents" />
 
     <CreateTodoModal
       ref="createModalRef"
@@ -619,9 +648,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background:
-    radial-gradient(1200px 400px at 10% -10%, var(--color-accent-soft), transparent 60%),
-    var(--color-bg);
+  background: var(--color-bg);
 }
 
 .body {
@@ -630,10 +657,16 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   min-height: 0;
   margin: 0;
   background: var(--color-surface);
-  border-top: 1px solid var(--color-border);
 }
 
-.global-error {
+.main-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.list-error {
   margin: 0;
   padding: 8px 16px;
   background: var(--color-danger-bg);

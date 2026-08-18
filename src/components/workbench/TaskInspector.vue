@@ -59,6 +59,7 @@ const reminderInput = ref("");
 const repeatType = ref<RepeatType>("none");
 const editingReminderId = ref<string | null>(null);
 const editingReminderAt = ref("");
+const showAddReminder = ref(false);
 
 const isDeleted = computed(() => Boolean(props.detail?.deletedAt));
 const statusRef = computed(() =>
@@ -103,7 +104,7 @@ const autosaveLabel = computed(() => {
     case "dirty":
       return t("inspector.autosaveDirty");
     default:
-      return t("inspector.autosaveIdle");
+      return "";
   }
 });
 
@@ -151,6 +152,7 @@ function submitReminder() {
   if (!reminderInput.value) return;
   emit("addReminder", reminderInput.value, repeatType.value);
   reminderInput.value = "";
+  showAddReminder.value = false;
 }
 
 function startEditReminder(reminder: ReminderDto) {
@@ -177,204 +179,208 @@ function onSnooze(reminderId: string, value: string) {
 </script>
 
 <template>
-  <aside class="inspector" :aria-label="$t('inspector.aria')">
-    <div v-if="!detail" class="empty">
-      <p class="empty-title">{{ $t("inspector.emptyTitle") }}</p>
-      <p class="empty-hint">{{ $t("inspector.emptyHint") }}</p>
-    </div>
-
-    <template v-else>
-      <header class="inspector-header">
-        <div class="header-left">
-          <span class="status-pill">{{ $t(`status.${detail.status}`) }}</span>
-          <span
-            class="save-hint"
-            :class="{
-              muted: saveStatus === 'idle',
-              dirty: saveStatus === 'dirty',
-              saving: saveStatus === 'saving',
-              saved: saveStatus === 'saved',
-            }"
-          >
-            {{ autosaveLabel }}
-          </span>
-        </div>
-        <button
-          type="button"
-          class="close-btn"
-          :aria-label="$t('common.close')"
-          @click="emit('close')"
+  <aside v-if="detail" class="inspector" :aria-label="$t('inspector.aria')">
+    <header class="inspector-header">
+      <div class="header-left">
+        <span class="status-pill" :data-status="detail.status">{{ $t(`status.${detail.status}`) }}</span>
+        <span
+          v-if="autosaveLabel"
+          class="save-hint"
+          :class="{
+            dirty: saveStatus === 'dirty',
+            saving: saveStatus === 'saving',
+            saved: saveStatus === 'saved',
+          }"
         >
-          ×
-        </button>
-      </header>
-
-      <div class="inspector-body">
-        <AppErrorBanner v-if="error" :message="error" />
-
-        <template v-if="isDeleted">
-          <p class="trash-note">{{ $t("inspector.trashNote") }}</p>
-          <div class="action-row">
-            <AppButton variant="primary" @click="emit('restore')">
-              {{ $t("inspector.restore") }}
-            </AppButton>
-          </div>
-          <label class="app-field">
-            <span>{{ $t("inspector.title") }}</span>
-            <input :value="editTitle" disabled />
-          </label>
-          <label class="app-field">
-            <span>{{ $t("inspector.description") }}</span>
-            <textarea rows="4" :value="editDescription" disabled />
-          </label>
-        </template>
-
-        <template v-else>
-          <div class="action-row">
-            <AppButton
-              v-for="action in actions"
-              :key="action.target"
-              :variant="action.target === 'Done' ? 'primary' : 'ghost'"
-              @click="emit('transition', action.target)"
-            >
-              {{ statusActionLabel(detail!.status, action.target, t) }}
-            </AppButton>
-            <AppButton variant="danger" @click="emit('remove')">{{ $t("inspector.remove") }}</AppButton>
-          </div>
-
-          <label class="app-field">
-            <span>{{ $t("inspector.title") }}</span>
-            <input
-              :value="editTitle"
-              maxlength="200"
-              @input="
-                emit('update:editTitle', ($event.target as HTMLInputElement).value);
-                onField();
-              "
-            />
-          </label>
-
-          <label class="app-field">
-            <span>{{ $t("inspector.description") }}</span>
-            <textarea
-              rows="5"
-              maxlength="5000"
-              :value="editDescription"
-              @input="
-                emit('update:editDescription', ($event.target as HTMLTextAreaElement).value);
-                onField();
-              "
-            />
-          </label>
-
-          <label class="app-field">
-            <span>{{ $t("inspector.priority") }}</span>
-            <AppSelect v-model="priorityModel" :options="priorityOptions" />
-          </label>
-
-          <label class="app-field">
-            <span>{{ $t("inspector.dueDate") }}</span>
-            <AppDateTimePicker v-model="dueModel" />
-          </label>
-
-          <div class="app-field">
-            <span>{{ $t("inspector.tags") }}</span>
-            <div class="chips">
-              <span v-for="tag in editTags" :key="tag" class="chip">
-                {{ tag }}
-                <button
-                  type="button"
-                  class="chip-x"
-                  :aria-label="$t('inspector.removeTag', { tag })"
-                  @click="removeTag(tag)"
-                >
-                  ×
-                </button>
-              </span>
-            </div>
-            <input
-              v-model="tagInput"
-              type="text"
-              :placeholder="$t('inspector.tagPlaceholder')"
-              @keydown="onTagKeydown"
-            />
-            <div v-if="tagSuggestions.length" class="suggestions">
-              <button
-                v-for="tag in tagSuggestions"
-                :key="tag"
-                type="button"
-                class="suggest"
-                @click="addTag(tag)"
-              >
-                {{ tag }}
-              </button>
-            </div>
-          </div>
-
-          <section class="reminders">
-            <h3>{{ $t("inspector.reminders") }}</h3>
-            <AppErrorBanner v-if="remindersError" :message="remindersError" />
-            <div v-if="remindersLoading" class="muted">{{ $t("inspector.loadingReminders") }}</div>
-            <ul v-else class="reminder-list">
-              <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
-                <template v-if="editingReminderId === reminder.id">
-                  <AppDateTimePicker v-model="editingReminderAt" :clearable="false" />
-                  <div class="reminder-actions">
-                    <AppButton variant="primary" @click="commitEditReminder">
-                      {{ $t("common.save") }}
-                    </AppButton>
-                    <AppButton variant="ghost" @click="cancelEditReminder">
-                      {{ $t("common.cancel") }}
-                    </AppButton>
-                  </div>
-                </template>
-                <template v-else>
-                  <div class="reminder-main" :class="{ disabled: !reminder.enabled }">
-                    <span>{{ formatDate(reminder.nextTriggerAt) }}</span>
-                    <span class="muted">{{ $t(`repeat.${reminder.repeatType}`) }}</span>
-                    <span v-if="!reminder.enabled" class="muted">{{ $t("inspector.disabled") }}</span>
-                    <span
-                      v-else-if="reminder.snoozeCount > 0"
-                      class="muted"
-                      :title="$t('inspector.originalTime')"
-                    >
-                      {{ $t("inspector.originalTimeLabel", { time: formatDate(reminder.remindAt) }) }}
-                    </span>
-                  </div>
-                  <div class="reminder-actions">
-                    <AppButton
-                      variant="ghost"
-                      :disabled="!reminder.enabled"
-                      @click="startEditReminder(reminder)"
-                    >
-                      {{ $t("inspector.reschedule") }}
-                    </AppButton>
-                    <AppSelect
-                      class="snooze"
-                      model-value=""
-                      :options="snoozeOptions"
-                      :placeholder="$t('inspector.snooze')"
-                      :disabled="!reminder.enabled"
-                      @update:model-value="onSnooze(reminder.id, $event)"
-                    />
-                    <AppButton variant="danger" @click="emit('removeReminder', reminder.id)">
-                      {{ $t("inspector.deleteShort") }}
-                    </AppButton>
-                  </div>
-                </template>
-              </li>
-              <li v-if="!reminders.length" class="muted">{{ $t("inspector.noReminders") }}</li>
-            </ul>
-
-            <div class="add-reminder">
-              <AppDateTimePicker v-model="reminderInput" :clearable="false" />
-              <AppSelect v-model="repeatType" :options="repeatOptions" />
-              <AppButton variant="primary" @click="submitReminder">{{ $t("common.add") }}</AppButton>
-            </div>
-          </section>
-        </template>
+          {{ autosaveLabel }}
+        </span>
       </div>
-    </template>
+      <button
+        type="button"
+        class="close-btn"
+        :aria-label="$t('common.close')"
+        @click="emit('close')"
+      >
+        ×
+      </button>
+    </header>
+
+    <div class="inspector-body">
+      <AppErrorBanner v-if="error" :message="error" />
+
+      <template v-if="isDeleted">
+        <p class="trash-note">{{ $t("inspector.trashNote") }}</p>
+        <div class="action-row">
+          <AppButton variant="primary" @click="emit('restore')">
+            {{ $t("inspector.restore") }}
+          </AppButton>
+        </div>
+        <label class="app-field">
+          <span>{{ $t("inspector.title") }}</span>
+          <input :value="editTitle" disabled />
+        </label>
+        <label class="app-field">
+          <span>{{ $t("inspector.description") }}</span>
+          <textarea rows="4" :value="editDescription" disabled />
+        </label>
+      </template>
+
+      <template v-else>
+        <div class="action-row">
+          <AppButton
+            v-for="action in actions"
+            :key="action.target"
+            :variant="action.target === 'Done' ? 'primary' : 'ghost'"
+            @click="emit('transition', action.target)"
+          >
+            {{ statusActionLabel(detail!.status, action.target, t) }}
+          </AppButton>
+          <AppButton variant="danger" @click="emit('remove')">{{ $t("inspector.remove") }}</AppButton>
+        </div>
+
+        <label class="app-field">
+          <span>{{ $t("inspector.title") }}</span>
+          <input
+            class="title-input"
+            :value="editTitle"
+            maxlength="200"
+            @input="
+              emit('update:editTitle', ($event.target as HTMLInputElement).value);
+              onField();
+            "
+          />
+        </label>
+
+        <label class="app-field">
+          <span>{{ $t("inspector.description") }}</span>
+          <textarea
+            rows="5"
+            maxlength="5000"
+            :value="editDescription"
+            @input="
+              emit('update:editDescription', ($event.target as HTMLTextAreaElement).value);
+              onField();
+            "
+          />
+        </label>
+
+        <label class="app-field">
+          <span>{{ $t("inspector.priority") }}</span>
+          <AppSelect v-model="priorityModel" :options="priorityOptions" />
+        </label>
+
+        <label class="app-field">
+          <span>{{ $t("inspector.dueDate") }}</span>
+          <AppDateTimePicker v-model="dueModel" />
+        </label>
+
+        <div class="app-field">
+          <span>{{ $t("inspector.tags") }}</span>
+          <div class="chips">
+            <span v-for="tag in editTags" :key="tag" class="chip">
+              {{ tag }}
+              <button
+                type="button"
+                class="chip-x"
+                :aria-label="$t('inspector.removeTag', { tag })"
+                @click="removeTag(tag)"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+          <input
+            v-model="tagInput"
+            type="text"
+            :placeholder="$t('inspector.tagPlaceholder')"
+            @keydown="onTagKeydown"
+          />
+          <div v-if="tagSuggestions.length" class="suggestions">
+            <button
+              v-for="tag in tagSuggestions"
+              :key="tag"
+              type="button"
+              class="suggest"
+              @click="addTag(tag)"
+            >
+              {{ tag }}
+            </button>
+          </div>
+        </div>
+
+        <section class="reminders">
+          <h3>{{ $t("inspector.reminders") }}</h3>
+          <AppErrorBanner v-if="remindersError" :message="remindersError" />
+          <div v-if="remindersLoading" class="muted">{{ $t("inspector.loadingReminders") }}</div>
+          <ul v-else class="reminder-list">
+            <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">
+              <template v-if="editingReminderId === reminder.id">
+                <AppDateTimePicker v-model="editingReminderAt" :clearable="false" />
+                <div class="reminder-actions">
+                  <AppButton variant="primary" @click="commitEditReminder">
+                    {{ $t("common.save") }}
+                  </AppButton>
+                  <AppButton variant="ghost" @click="cancelEditReminder">
+                    {{ $t("common.cancel") }}
+                  </AppButton>
+                </div>
+              </template>
+              <template v-else>
+                <div class="reminder-main" :class="{ disabled: !reminder.enabled }">
+                  <span>{{ formatDate(reminder.nextTriggerAt) }}</span>
+                  <span class="muted">{{ $t(`repeat.${reminder.repeatType}`) }}</span>
+                  <span v-if="!reminder.enabled" class="muted">{{ $t("inspector.disabled") }}</span>
+                  <span
+                    v-else-if="reminder.snoozeCount > 0"
+                    class="muted"
+                    :title="$t('inspector.originalTime')"
+                  >
+                    {{ $t("inspector.originalTimeLabel", { time: formatDate(reminder.remindAt) }) }}
+                  </span>
+                </div>
+                <div class="reminder-actions">
+                  <AppButton
+                    variant="ghost"
+                    :disabled="!reminder.enabled"
+                    @click="startEditReminder(reminder)"
+                  >
+                    {{ $t("inspector.reschedule") }}
+                  </AppButton>
+                  <AppSelect
+                    class="snooze"
+                    model-value=""
+                    :options="snoozeOptions"
+                    :placeholder="$t('inspector.snooze')"
+                    :disabled="!reminder.enabled"
+                    @update:model-value="onSnooze(reminder.id, $event)"
+                  />
+                  <AppButton variant="danger" @click="emit('removeReminder', reminder.id)">
+                    {{ $t("inspector.deleteShort") }}
+                  </AppButton>
+                </div>
+              </template>
+            </li>
+            <li v-if="!reminders.length" class="muted">{{ $t("inspector.noReminders") }}</li>
+          </ul>
+
+          <div v-if="!showAddReminder">
+            <AppButton variant="ghost" @click="showAddReminder = true">
+              {{ $t("inspector.addReminder") }}
+            </AppButton>
+          </div>
+          <div v-else class="add-reminder">
+            <AppDateTimePicker v-model="reminderInput" :clearable="false" />
+            <AppSelect v-model="repeatType" :options="repeatOptions" />
+            <div class="reminder-actions">
+              <AppButton variant="primary" @click="submitReminder">{{ $t("common.add") }}</AppButton>
+              <AppButton variant="ghost" @click="showAddReminder = false">
+                {{ $t("common.cancel") }}
+              </AppButton>
+            </div>
+          </div>
+        </section>
+      </template>
+    </div>
   </aside>
 </template>
 
@@ -382,12 +388,13 @@ function onSnooze(reminderId: string, value: string) {
 @import "@/styles/forms.css";
 
 .inspector {
-  width: 340px;
+  width: 320px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--color-surface);
   min-height: 0;
+  border-left: 1px solid var(--color-border);
 }
 
 .inspector-header {
@@ -411,6 +418,16 @@ function onSnooze(reminderId: string, value: string) {
   border-radius: var(--radius-pill);
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
+}
+
+.status-pill[data-status="Doing"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.status-pill[data-status="Done"] {
+  background: var(--color-surface-muted);
+  color: var(--color-success);
 }
 
 .save-hint {
@@ -575,21 +592,8 @@ function onSnooze(reminderId: string, value: string) {
   gap: 8px;
 }
 
-.empty {
-  padding: 40px 24px;
-  text-align: center;
-}
-
-.empty-title {
-  margin: 0 0 6px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.empty-hint {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-muted);
-  line-height: 1.5;
+.title-input {
+  font-size: 17px;
+  font-weight: 650;
 }
 </style>

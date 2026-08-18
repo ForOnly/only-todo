@@ -118,12 +118,10 @@ impl WorkbenchView {
         }
     }
 
-    /// settings `list.default_view`：非法或 tag → Today
+    /// settings `list.default_view`：非法、tag、以及已撤出顶层的 doing/overdue → Today（焦点台）
     #[allow(clippy::should_implement_trait)]
     pub fn from_settings_str(value: &str) -> Self {
         match value {
-            "overdue" => Self::Overdue,
-            "doing" => Self::Doing,
             "all" => Self::All,
             "done" => Self::Done,
             "archived" => Self::Archived,
@@ -133,10 +131,32 @@ impl WorkbenchView {
         }
     }
 
-    /// 可作为启动默认归类（排除 Tag）
+    /// 可作为启动默认落点：焦点台或库内归类（排除标签与已撤出的顶层视图）
     pub fn is_default_view_candidate(self) -> bool {
-        !matches!(self, Self::Tag)
+        matches!(
+            self,
+            Self::Today | Self::All | Self::Done | Self::Archived | Self::Trash
+        )
     }
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct ListFocusBoardQuery {
+    #[serde(default = "default_sort_by")]
+    pub sort_by: String,
+    #[serde(default = "default_sort_order")]
+    pub sort_order: String,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct FocusBoardDto {
+    pub overdue: Vec<TodoDto>,
+    pub doing: Vec<TodoDto>,
+    pub due_today: Vec<TodoDto>,
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]

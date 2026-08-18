@@ -1,32 +1,66 @@
 <script setup lang="ts">
 import AppButton from "@/components/common/AppButton.vue";
+import type { MainMode } from "@/api/types";
 
 defineProps<{
   keyword: string;
+  mode: MainMode;
 }>();
 
 const emit = defineEmits<{
   "update:keyword": [value: string];
+  "update:mode": [value: MainMode];
   search: [];
-  create: [];
+  clearSearch: [];
   settings: [];
 }>();
 </script>
 
 <template>
   <header class="header">
-    <div class="brand">{{ $t("common.brand") }}</div>
+    <div class="modes" role="tablist" :aria-label="$t('modes.aria')">
+      <button
+        type="button"
+        role="tab"
+        class="mode"
+        :class="{ active: mode === 'focus' }"
+        :aria-selected="mode === 'focus'"
+        @click="emit('update:mode', 'focus')"
+      >
+        {{ $t("modes.focus") }}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="mode"
+        :class="{ active: mode === 'library' }"
+        :aria-selected="mode === 'library'"
+        @click="emit('update:mode', 'library')"
+      >
+        {{ $t("modes.library") }}
+      </button>
+    </div>
     <div class="actions">
-      <input
-        id="workbench-search"
-        class="search"
-        type="text"
-        :placeholder="$t('header.searchPlaceholder')"
-        :value="keyword"
-        @input="emit('update:keyword', ($event.target as HTMLInputElement).value)"
-        @keydown.enter="emit('search')"
-      />
-      <AppButton variant="primary" @click="emit('create')">{{ $t("header.newTodo") }}</AppButton>
+      <div class="search-wrap">
+        <input
+          id="workbench-search"
+          class="search"
+          type="text"
+          :placeholder="$t('header.searchPlaceholder')"
+          :value="keyword"
+          @input="emit('update:keyword', ($event.target as HTMLInputElement).value)"
+          @keydown.enter="emit('search')"
+        />
+        <button
+          v-if="keyword"
+          type="button"
+          class="clear"
+          :aria-label="$t('header.clearSearch')"
+          @click="emit('clearSearch')"
+        >
+          ×
+        </button>
+      </div>
       <AppButton variant="ghost" @click="emit('settings')">{{ $t("header.settings") }}</AppButton>
     </div>
   </header>
@@ -36,20 +70,42 @@ const emit = defineEmits<{
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);
-  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-muted) 100%);
+  background: var(--color-surface);
 }
 
-.brand {
-  font-family: var(--font-ui);
-  font-weight: 750;
-  font-size: 18px;
-  letter-spacing: -0.02em;
-  color: var(--color-text);
+.modes {
+  display: flex;
+  gap: 2px;
   flex-shrink: 0;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.mode {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mode.active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.mode:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .actions {
@@ -61,16 +117,22 @@ const emit = defineEmits<{
   justify-content: flex-end;
 }
 
-.search {
+.search-wrap {
+  position: relative;
   flex: 1;
-  max-width: 320px;
+  max-width: 360px;
   min-width: 120px;
-  padding: 8px 10px;
+}
+
+.search {
+  width: 100%;
+  padding: 8px 28px 8px 10px;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   font: inherit;
   color: var(--color-text);
   background: var(--color-surface);
+  box-sizing: border-box;
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
@@ -80,5 +142,23 @@ const emit = defineEmits<{
   outline: none;
   border-color: var(--color-accent);
   box-shadow: var(--focus-ring);
+}
+
+.clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.clear:hover {
+  color: var(--color-text);
 }
 </style>

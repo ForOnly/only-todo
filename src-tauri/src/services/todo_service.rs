@@ -4,8 +4,8 @@ use crate::domain::{
     priority::Priority,
     status::{StatusActionDto, TodoStatus},
     todo::{
-        CreateTodoDto, ListTodoQuery, ListWorkbenchQuery, PaginatedResponse, TodoDto,
-        UpdateTodoDto, WorkbenchView,
+        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTodoQuery, ListWorkbenchQuery,
+        PaginatedResponse, TodoDto, UpdateTodoDto, WorkbenchView,
     },
 };
 use crate::errors::AppError;
@@ -110,47 +110,33 @@ impl TodoService {
 
         match query.view {
             WorkbenchView::Today => {
-                let now = Utc::now();
-                let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-                let end = start + Duration::days(1);
-                let due_query = ListTodoQuery {
-                    status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
-                    due_date_after: Some(start.to_rfc3339()),
-                    due_date_before: Some(end.to_rfc3339()),
-                    keyword: keyword.clone(),
-                    sort_by: query.sort_by.clone(),
-                    sort_order: query.sort_order.clone(),
-                    page: 1,
-                    page_size: TODAY_FETCH_LIMIT,
-                    ..Default::default()
-                };
-                let doing_query = ListTodoQuery {
-                    status: Some(vec![TodoStatus::Doing]),
-                    keyword: keyword.clone(),
-                    sort_by: query.sort_by.clone(),
-                    sort_order: query.sort_order.clone(),
-                    page: 1,
-                    page_size: TODAY_FETCH_LIMIT,
-                    ..Default::default()
-                };
-                let due = TodoRepository::list(db, &due_query)?;
-                let doing = TodoRepository::list(db, &doing_query)?;
-                let mut map = std::collections::HashMap::new();
-                for todo in due.items.into_iter().chain(doing.items) {
-                    map.insert(todo.id.clone(), todo);
-                }
-                let mut items: Vec<_> = map.into_values().collect();
-                sort_todos_in_memory(&mut items, &query.sort_by, &query.sort_order);
+                let board = Self::list_focus_board(
+                    db,
+                    ListFocusBoardQuery {
+                        sort_by: query.sort_by,
+                        sort_order: query.sort_order,
+                    },
+                )?;
+                let items: Vec<TodoDto> = board
+                    .overdue
+                    .into_iter()
+                    .chain(board.doing)
+                    .chain(board.due_today)
+                    .collect();
                 let total = items.len() as u64;
                 Ok(PaginatedResponse {
-                    items: items.into_iter().map(TodoDto::from).collect(),
+                    items,
                     total,
                     page: 1,
                     page_size: TODAY_FETCH_LIMIT,
                 })
             }
             WorkbenchView::Overdue => {
-                let start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let start = Utc::now()
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc();
                 Self::list(
                     db,
                     ListTodoQuery {
@@ -243,6 +229,79 @@ impl TodoService {
         }
     }
 
+    /// 焦点台：逾期 / 进行中（未逾期）/ 今日到期（仅 Todo），三组互斥。
+    pub fn list_focus_board(
+        db: &Database,
+        query: ListFocusBoardQuery,
+    ) -> Result<FocusBoardDto, AppError> {
+        let now = Utc::now();
+        let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let end = start + Duration::days(1);
+        let sort_by = if query.sort_by.trim().is_empty() {
+            "priority".to_string()
+        } else {
+            query.sort_by
+        };
+        let sort_order = if query.sort_order.trim().is_empty() {
+            "desc".to_string()
+        } else {
+            query.sort_order
+        };
+
+        let overdue = Self::list(
+            db,
+            ListTodoQuery {
+                status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
+                due_date_before: Some(start.to_rfc3339()),
+                sort_by: sort_by.clone(),
+                sort_order: sort_order.clone(),
+                page: 1,
+                page_size: TODAY_FETCH_LIMIT,
+                ..Default::default()
+            },
+        )?;
+
+        let doing_all = Self::list(
+            db,
+            ListTodoQuery {
+                status: Some(vec![TodoStatus::Doing]),
+                sort_by: sort_by.clone(),
+                sort_order: sort_order.clone(),
+                page: 1,
+                page_size: TODAY_FETCH_LIMIT,
+                ..Default::default()
+            },
+        )?;
+
+        let due_today = Self::list(
+            db,
+            ListTodoQuery {
+                status: Some(vec![TodoStatus::Todo]),
+                due_date_after: Some(start.to_rfc3339()),
+                due_date_before: Some(end.to_rfc3339()),
+                sort_by,
+                sort_order,
+                page: 1,
+                page_size: TODAY_FETCH_LIMIT,
+                ..Default::default()
+            },
+        )?;
+
+        let overdue_ids: std::collections::HashSet<String> =
+            overdue.items.iter().map(|todo| todo.id.clone()).collect();
+        let doing = doing_all
+            .items
+            .into_iter()
+            .filter(|todo| !overdue_ids.contains(&todo.id))
+            .collect();
+
+        Ok(FocusBoardDto {
+            overdue: overdue.items,
+            doing,
+            due_today: due_today.items,
+        })
+    }
+
     pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
         TodoRepository::list_all_tags(db)
     }
@@ -317,38 +376,6 @@ fn normalize_page(page: &mut u32, page_size: &mut u32) -> Result<(), AppError> {
         });
     }
     Ok(())
-}
-
-fn sort_todos_in_memory(
-    items: &mut [crate::domain::todo::Todo],
-    sort_by: &str,
-    sort_order: &str,
-) {
-    let desc = sort_order.eq_ignore_ascii_case("desc");
-    items.sort_by(|a, b| {
-        let ord = match sort_by {
-            "createdAt" | "created_at" => a.created_at.cmp(&b.created_at),
-            "updatedAt" | "updated_at" => a.updated_at.cmp(&b.updated_at),
-            "completedAt" | "completed_at" => a.completed_at.cmp(&b.completed_at),
-            "dueDate" | "due_date" => a.due_date.cmp(&b.due_date),
-            "title" => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
-            _ => priority_rank(a.priority).cmp(&priority_rank(b.priority)),
-        };
-        if desc {
-            ord.reverse()
-        } else {
-            ord
-        }
-    });
-}
-
-fn priority_rank(priority: Priority) -> u8 {
-    match priority {
-        Priority::Urgent => 4,
-        Priority::High => 3,
-        Priority::Medium => 2,
-        Priority::Low => 1,
-    }
 }
 
 fn validate_title(title: &str) -> Result<(), AppError> {

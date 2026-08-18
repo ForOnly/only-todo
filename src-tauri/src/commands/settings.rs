@@ -1,7 +1,7 @@
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::domain::{SettingsDto, UpdateSettingsDto};
+use crate::domain::{AppearanceDto, SettingsDto, UpdateSettingsDto};
 use crate::errors::AppError;
 use crate::float::host::FloatHost;
 use crate::services::settings_service::SettingsService;
@@ -10,6 +10,24 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn get_settings(state: State<AppState>) -> Result<SettingsDto, AppError> {
     SettingsService::get(&state.db)
+}
+
+#[tauri::command]
+pub fn get_appearance(app: AppHandle) -> AppearanceDto {
+    app.try_state::<crate::appearance::AppearanceHost>()
+        .map(|host| host.snapshot())
+        .unwrap_or_else(|| {
+            let preference = app
+                .try_state::<AppState>()
+                .and_then(|state| SettingsService::get(&state.db).ok())
+                .map(|settings| settings.ui_theme)
+                .unwrap_or(crate::domain::UiTheme::System);
+            let os = crate::appearance::query_os_theme(&app, None);
+            AppearanceDto {
+                preference,
+                resolved: preference.resolve(os),
+            }
+        })
 }
 
 #[tauri::command]
@@ -39,6 +57,7 @@ pub fn update_settings(
 
     let home_changed = settings.float_default_mode != previous.float_default_mode;
     let _ = FloatHost::on_settings_updated(&app, home_changed);
+    crate::appearance::sync_from_settings(&app);
     let _ = app.emit("settings-updated", &settings);
     Ok(settings)
 }
@@ -69,7 +88,5 @@ fn sync_autostart_os(app: &AppHandle, enabled: bool) {
 
 fn is_missing_autostart_entry(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
-    lower.contains("os error 2")
-        || lower.contains("not found")
-        || message.contains("找不到")
+    lower.contains("os error 2") || lower.contains("not found") || message.contains("找不到")
 }
