@@ -118,6 +118,8 @@ const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
 const eventUnlisteners: (() => void)[] = [];
+/** 检视器关闭动画中，延迟销毁内容 */
+const closingInspector = ref(false);
 
 const showQuickAdd = computed(() => {
   if (searchActive.value) return false;
@@ -307,6 +309,8 @@ async function moveSelection(delta: number) {
 }
 
 async function navigateToTodo(id: string | null) {
+  // 取消正在进行的关闭动画，避免 timeout 覆盖新选中
+  closingInspector.value = false;
   if (!(await flushAutosave())) return;
   if (!id) {
     await selectTodo(null);
@@ -346,9 +350,16 @@ function openCreateModal(opts?: { dueToday?: boolean }) {
 }
 
 async function closeDetail(): Promise<boolean> {
+  if (closingInspector.value) return false;
   if (!(await flushAutosave())) return false;
-  selectedId.value = null;
-  return true;
+  closingInspector.value = true;
+  await new Promise((resolve) => setTimeout(resolve, 220));
+  if (closingInspector.value) {
+    selectedId.value = null;
+    closingInspector.value = false;
+    return true;
+  }
+  return false;
 }
 
 async function handleSelect(id: string) {
@@ -470,15 +481,13 @@ async function handleSnoozeReminder(id: string, minutes: number) {
 }
 
 async function handleModeChange(next: typeof mode.value) {
-  if (!(await flushAutosave())) return;
-  selectedId.value = null;
+  if (!(await closeDetail())) return;
   setMode(next);
 }
 
 async function handleViewSelect(next: WorkbenchView, tag?: string | null) {
-  if (!(await flushAutosave())) return;
+  if (!(await closeDetail())) return;
   setView(next, tag);
-  selectedId.value = null;
 }
 
 function handleChangeSort(next: SortBy) {
@@ -574,31 +583,32 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
         />
       </div>
 
-      <TaskInspector
-        v-if="selectedId"
-        :detail="detail"
-        v-model:edit-title="editTitle"
-        v-model:edit-description="editDescription"
-        v-model:edit-priority="editPriority"
-        v-model:edit-due-date="editDueDate"
-        v-model:edit-tags="editTags"
-        :saving="saving"
-        :save-status="saveStatus"
-        :error="detailError"
-        :reminders="reminders"
-        :reminders-loading="remindersLoading"
-        :reminders-error="remindersError ?? reminderError"
-        :suggested-tags="allTags"
-        @field-change="scheduleAutosave"
-        @close="closeDetail"
-        @transition="transitionTo"
-        @remove="handleRemove"
-        @restore="handleRestore"
-        @add-reminder="handleAddReminder"
-        @update-reminder="handleUpdateReminder"
-        @remove-reminder="handleRemoveReminder"
-        @snooze-reminder="handleSnoozeReminder"
-      />
+      <div class="inspector-panel" :class="{ open: !!selectedId && !closingInspector }">
+        <TaskInspector
+          :detail="detail"
+          v-model:edit-title="editTitle"
+          v-model:edit-description="editDescription"
+          v-model:edit-priority="editPriority"
+          v-model:edit-due-date="editDueDate"
+          v-model:edit-tags="editTags"
+          :saving="saving"
+          :save-status="saveStatus"
+          :error="detailError"
+          :reminders="reminders"
+          :reminders-loading="remindersLoading"
+          :reminders-error="remindersError ?? reminderError"
+          :suggested-tags="allTags"
+          @field-change="scheduleAutosave"
+          @close="closeDetail"
+          @transition="transitionTo"
+          @remove="handleRemove"
+          @restore="handleRestore"
+          @add-reminder="handleAddReminder"
+          @update-reminder="handleUpdateReminder"
+          @remove-reminder="handleRemoveReminder"
+          @snooze-reminder="handleSnoozeReminder"
+        />
+      </div>
     </div>
 
     <ActivityStrip v-if="mode === 'library'" :events="recentEvents" />
@@ -671,5 +681,17 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   padding: 8px 16px;
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+
+.inspector-panel {
+  width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-left: 1px solid var(--color-border);
+  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.inspector-panel.open {
+  width: 320px;
 }
 </style>

@@ -436,7 +436,6 @@ function onSnooze(reminderId: string, value: string) {
   flex-direction: column;
   background: var(--color-surface);
   min-height: 0;
-  border-left: 1px solid var(--color-border);
 }
 
 .inspector-header {
