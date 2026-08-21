@@ -125,6 +125,11 @@ export default {
     daily: "每日",
     weekly: "每周",
   },
+  peek: {
+    edit: "编辑",
+    editHint: "在抽屉中编辑",
+    noDescription: "暂无描述",
+  },
   inspector: {
     aria: "任务编辑",
     emptyTitle: "选择一条任务",

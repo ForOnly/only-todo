@@ -125,6 +125,11 @@ export default {
     daily: "Daily",
     weekly: "Weekly",
   },
+  peek: {
+    edit: "Edit",
+    editHint: "Edit in drawer",
+    noDescription: "No description",
+  },
   inspector: {
     aria: "Task editor",
     emptyTitle: "Select a task",

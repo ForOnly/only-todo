@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
 import AppTagChip from "@/components/common/AppTagChip.vue";
+import TaskPeekPanel from "@/components/workbench/TaskPeekPanel.vue";
 import type { FocusBoardDto, SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
 import { formatRelativeAge, formatRelativeDue, getOverdueDaysOnly } from "@/utils/timeMeta";
 import { sortKeysForView } from "@/utils/listSort";
@@ -35,10 +36,49 @@ const emit = defineEmits<{
   changeSort: [sortBy: SortBy];
   toggleSortOrder: [];
   quickAdd: [title: string];
+  peekEdit: [id: string];
 }>();
 
 const { t } = useI18n();
 const quickTitle = ref("");
+
+/** peek 展开/收拢动画延迟卸载 */
+const PEEK_CLOSE_MS = 200;
+const mountedPeekId = ref<string | null>(props.selectedId);
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.selectedId,
+  (id, prev) => {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    if (id) {
+      mountedPeekId.value = id;
+      return;
+    }
+    const closing = prev ?? mountedPeekId.value;
+    if (!closing) {
+      mountedPeekId.value = null;
+      return;
+    }
+    mountedPeekId.value = closing;
+    closeTimer = setTimeout(() => {
+      if (props.selectedId === null) {
+        mountedPeekId.value = null;
+      }
+      closeTimer = null;
+    }, PEEK_CLOSE_MS);
+  },
+);
+
+onUnmounted(() => {
+  if (closeTimer) {
+    clearTimeout(closeTimer);
+    closeTimer = null;
+  }
+});
 
 interface ListGroup {
   id: string;
@@ -213,49 +253,63 @@ function submitQuickAdd() {
           v-for="todo in group.items"
           :key="todo.id"
           class="todo-item"
-          tabindex="0"
           :class="{
             active: todo.id === selectedId,
             done: todo.status === 'Done',
             'overdue-row': group.id === 'overdue',
           }"
-          @click="onRowClick(todo)"
-          @keydown.enter.prevent="onRowClick(todo)"
         >
           <span class="priority-bar" :data-priority="todo.priority" />
-          <input
-            class="check"
-            type="checkbox"
-            :checked="todo.status === 'Done'"
-            :disabled="!canToggle(todo)"
-            :aria-label="todo.status === 'Done' ? $t('list.markUndone') : $t('list.markDone')"
-            @click="onCheck(todo, $event)"
-          />
-          <div class="body">
-            <div class="title-meta-row">
-              <div class="title-row">
-                <span class="title">{{ todo.title }}</span>
-                <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+          <div
+            class="todo-row"
+            tabindex="0"
+            @click="onRowClick(todo)"
+            @keydown.enter.prevent="onRowClick(todo)"
+          >
+            <input
+              class="check"
+              type="checkbox"
+              :checked="todo.status === 'Done'"
+              :disabled="!canToggle(todo)"
+              :aria-label="todo.status === 'Done' ? $t('list.markUndone') : $t('list.markDone')"
+              @click="onCheck(todo, $event)"
+            />
+            <div class="body">
+              <div class="title-meta-row">
+                <div class="title-row">
+                  <span class="title">{{ todo.title }}</span>
+                  <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+                </div>
+                <div class="meta-right">
+                  <span
+                    class="meta-single"
+                    :class="{ 'due-overdue': getOverdueDaysOnly(todo.dueDate, todo.status) }"
+                  >
+                    {{ listMetaToken(todo) }}
+                  </span>
+                </div>
               </div>
-              <div class="meta-right">
-                <span
-                  class="meta-single"
-                  :class="{ 'due-overdue': getOverdueDaysOnly(todo.dueDate, todo.status) }"
-                >
-                  {{ listMetaToken(todo) }}
-                </span>
+              <div v-if="todo.tags.length" class="tag-row">
+                <AppTagChip
+                  v-for="tag in visibleTags(todo)"
+                  :key="tag"
+                  :label="tag"
+                />
+                <AppTagChip
+                  v-if="extraTagCount(todo)"
+                  :label="$t('list.moreTags', { n: extraTagCount(todo) })"
+                  more
+                />
               </div>
             </div>
-            <div v-if="todo.tags.length" class="tag-row">
-              <AppTagChip
-                v-for="tag in visibleTags(todo)"
-                :key="tag"
-                :label="tag"
-              />
-              <AppTagChip
-                v-if="extraTagCount(todo)"
-                :label="$t('list.moreTags', { n: extraTagCount(todo) })"
-                more
+          </div>
+
+          <div class="peek-wrap" :class="{ open: selectedId === todo.id }">
+            <div class="peek-inner">
+              <TaskPeekPanel
+                v-if="mountedPeekId === todo.id"
+                :todo="todo"
+                @edit="emit('peekEdit', todo.id)"
               />
             </div>
           </div>
@@ -279,6 +333,7 @@ function submitQuickAdd() {
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   background: var(--color-surface);
 }
 
@@ -409,13 +464,16 @@ function submitQuickAdd() {
 
 .todo-item {
   position: relative;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.todo-row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   padding: 10px 16px 10px 14px;
-  border-bottom: 1px solid var(--color-border);
-  cursor: pointer;
-  transition: background 0.15s ease;
 }
 
 .todo-item:hover {
@@ -426,7 +484,7 @@ function submitQuickAdd() {
   background: var(--color-accent-soft);
 }
 
-.todo-item:focus-visible {
+.todo-row:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
@@ -597,5 +655,27 @@ function submitQuickAdd() {
   padding: 24px;
   color: var(--color-muted);
   text-align: center;
+}
+
+.peek-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s ease;
+}
+
+.peek-wrap.open {
+  grid-template-rows: 1fr;
+}
+
+.peek-inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.peek-wrap.open .peek-inner {
+  opacity: 1;
+  overflow: visible;
 }
 </style>

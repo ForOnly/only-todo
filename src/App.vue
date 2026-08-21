@@ -21,6 +21,7 @@ import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
 import CreateTodoModal from "@/components/todo/CreateTodoModal.vue";
 import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
+import TaskEditDrawer from "@/components/common/TaskEditDrawer.vue";
 import ViewSidebar from "@/components/workbench/ViewSidebar.vue";
 import TaskListPane from "@/components/workbench/TaskListPane.vue";
 import TaskInspector from "@/components/workbench/TaskInspector.vue";
@@ -62,6 +63,9 @@ const {
   goToPage,
 } = useTodos();
 
+/** 驱动右侧编辑面板（双击/peek 编辑按钮打开） */
+const editingId = ref<string | null>(null);
+
 const {
   reminders,
   loading: remindersLoading,
@@ -71,7 +75,7 @@ const {
   updateReminder,
   removeReminder,
   snoozeReminder,
-} = useReminders(selectedId);
+} = useReminders(editingId);
 
 const {
   detail,
@@ -90,7 +94,7 @@ const {
   transitionTo,
   remove,
   restore,
-} = useTodoDetail(selectedId, async () => {
+} = useTodoDetail(editingId, async () => {
   await fetchTodos();
   await loadTags();
   await loadRecentEvents();
@@ -118,8 +122,6 @@ const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
 const eventUnlisteners: (() => void)[] = [];
-/** 检视器关闭动画中，延迟销毁内容 */
-const closingInspector = ref(false);
 
 const showQuickAdd = computed(() => {
   if (searchActive.value) return false;
@@ -208,12 +210,12 @@ onMounted(async () => {
           await fetchTodos();
           await loadTags();
           await loadRecentEvents();
-          if (!selectedId.value || saving.value) return;
+          if (!editingId.value || saving.value) return;
           if (isDirty()) {
             await flushAutosave();
           } else {
             await reload();
-            await fetchReminders(selectedId.value);
+            await fetchReminders(editingId.value!);
           }
         })();
       }, 200);
@@ -259,9 +261,12 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
   if (event.key === "Escape") {
     if (modalEscDepth() > 0) return;
-    if (selectedId.value) {
+    if (editingId.value) {
       event.preventDefault();
       void closeDetail();
+    } else if (selectedId.value) {
+      event.preventDefault();
+      selectedId.value = null;
     }
     return;
   }
@@ -309,8 +314,6 @@ async function moveSelection(delta: number) {
 }
 
 async function navigateToTodo(id: string | null) {
-  // 取消正在进行的关闭动画，避免 timeout 覆盖新选中
-  closingInspector.value = false;
   if (!(await flushAutosave())) return;
   if (!id) {
     await selectTodo(null);
@@ -350,31 +353,28 @@ function openCreateModal(opts?: { dueToday?: boolean }) {
 }
 
 async function closeDetail(): Promise<boolean> {
-  if (closingInspector.value) return false;
   if (!(await flushAutosave())) return false;
-  closingInspector.value = true;
-  await new Promise((resolve) => setTimeout(resolve, 220));
-  if (closingInspector.value) {
-    selectedId.value = null;
-    closingInspector.value = false;
-    return true;
-  }
-  return false;
+  editingId.value = null;
+  return true;
 }
 
 async function handleSelect(id: string) {
   if (selectedId.value === id) {
-    await closeDetail();
+    selectedId.value = null;
     return;
   }
   await navigateToTodo(id);
+}
+
+function handlePeekEdit(id: string) {
+  editingId.value = id;
 }
 
 async function handleToggleComplete(todo: TodoDto) {
   try {
     const next = todo.status === "Done" ? "Todo" : "Done";
     await transitionTodo(todo.id, next);
-    if (selectedId.value === todo.id) {
+    if (editingId.value === todo.id) {
       await reload();
     }
     await fetchTodos();
@@ -386,12 +386,13 @@ async function handleToggleComplete(todo: TodoDto) {
 async function handleRemove() {
   const ok = await remove();
   if (ok) {
+    selectedId.value = null;
     await loadTags();
   }
 }
 
 async function handleRestore() {
-  const restoredId = selectedId.value;
+  const restoredId = editingId.value;
   const ok = await restore();
   if (ok && restoredId) {
     mode.value = "library";
@@ -400,7 +401,8 @@ async function handleRestore() {
     searchActive.value = false;
     page.value = 1;
     await fetchTodos();
-    await selectTodo(restoredId);
+    selectedId.value = restoredId;
+    editingId.value = restoredId;
     await loadTags();
   }
 }
@@ -420,6 +422,7 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
       page.value = 1;
       await fetchTodos();
       await selectTodo(created.id);
+      editingId.value = created.id;
     }
   } catch (err) {
     createModalRef.value?.setError(formatErrorMessage(err));
@@ -441,40 +444,40 @@ async function handleQuickAdd(title: string) {
 }
 
 async function handleAddReminder(datetime: string, repeatType?: RepeatType) {
-  if (!selectedId.value) return;
+  if (!editingId.value) return;
   reminderError.value = null;
   try {
-    await addReminder(selectedId.value, datetime, repeatType);
+    await addReminder(editingId.value, datetime, repeatType);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
 }
 
 async function handleUpdateReminder(id: string, datetime: string) {
-  if (!selectedId.value) return;
+  if (!editingId.value) return;
   reminderError.value = null;
   try {
-    await updateReminder(id, selectedId.value, datetime);
+    await updateReminder(id, editingId.value, datetime);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
 }
 
 async function handleRemoveReminder(id: string) {
-  if (!selectedId.value) return;
+  if (!editingId.value) return;
   reminderError.value = null;
   try {
-    await removeReminder(id, selectedId.value);
+    await removeReminder(id, editingId.value);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
 }
 
 async function handleSnoozeReminder(id: string, minutes: number) {
-  if (!selectedId.value) return;
+  if (!editingId.value) return;
   reminderError.value = null;
   try {
-    await snoozeReminder(id, selectedId.value, minutes);
+    await snoozeReminder(id, editingId.value, minutes);
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
@@ -482,11 +485,13 @@ async function handleSnoozeReminder(id: string, minutes: number) {
 
 async function handleModeChange(next: typeof mode.value) {
   if (!(await closeDetail())) return;
+  selectedId.value = null;
   setMode(next);
 }
 
 async function handleViewSelect(next: WorkbenchView, tag?: string | null) {
   if (!(await closeDetail())) return;
+  selectedId.value = null;
   setView(next, tag);
 }
 
@@ -580,10 +585,11 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
           @change-sort="handleChangeSort"
           @toggle-sort-order="handleToggleSortOrder"
           @quick-add="handleQuickAdd"
+          @peek-edit="handlePeekEdit"
         />
       </div>
 
-      <div class="inspector-panel" :class="{ open: !!selectedId && !closingInspector }">
+      <TaskEditDrawer :open="!!editingId" @close="closeDetail">
         <TaskInspector
           :detail="detail"
           v-model:edit-title="editTitle"
@@ -608,7 +614,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
           @remove-reminder="handleRemoveReminder"
           @snooze-reminder="handleSnoozeReminder"
         />
-      </div>
+      </TaskEditDrawer>
     </div>
 
     <ActivityStrip v-if="mode === 'library'" :events="recentEvents" />
@@ -674,6 +680,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .list-error {
@@ -681,17 +688,5 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   padding: 8px 16px;
   background: var(--color-danger-bg);
   color: var(--color-danger);
-}
-
-.inspector-panel {
-  width: 0;
-  overflow: hidden;
-  flex-shrink: 0;
-  border-left: 1px solid var(--color-border);
-  transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.inspector-panel.open {
-  width: 320px;
 }
 </style>

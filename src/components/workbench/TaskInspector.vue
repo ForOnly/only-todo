@@ -430,12 +430,12 @@ function onSnooze(reminderId: string, value: string) {
 @import "@/styles/forms.css";
 
 .inspector {
-  width: 320px;
-  flex-shrink: 0;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--color-surface);
-  min-height: 0;
 }
 
 .inspector-header {
