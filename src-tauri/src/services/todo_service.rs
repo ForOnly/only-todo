@@ -1,11 +1,12 @@
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 
 use crate::domain::{
     priority::Priority,
     status::{StatusActionDto, TodoStatus},
     todo::{
-        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTodoQuery, ListWorkbenchQuery,
-        PaginatedResponse, TodoDto, UpdateTodoDto, WorkbenchView,
+        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTimePlannerQuery, ListTodoQuery,
+        ListWorkbenchQuery, PaginatedResponse, TimePlannerDto, TodoDto, TodoPlannerPreviewDto,
+        UpdateTodoDto, WorkbenchView,
     },
 };
 use crate::errors::AppError;
@@ -302,6 +303,52 @@ impl TodoService {
         })
     }
 
+    /// 时间规划面板：接下来 / 逾期 / 最久未动
+    pub fn list_time_planner(
+        db: &Database,
+        query: ListTimePlannerQuery,
+    ) -> Result<TimePlannerDto, AppError> {
+        let now = Utc::now();
+        let start_of_today = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let range_end = now + Duration::days(query.range_days.max(1) as i64);
+        let top_n = query.top_n.max(1).min(20) as usize;
+
+        let rows = TodoRepository::list_active_for_planner(db)?;
+        let mut overdue = Vec::new();
+        let mut next = Vec::new();
+        let mut stale = Vec::new();
+
+        for (todo, next_trigger) in rows {
+            let preview = planner_preview_from(&todo, next_trigger);
+
+            if let Some(due) = todo.due_date {
+                if due < start_of_today {
+                    overdue.push(preview.clone());
+                }
+            }
+
+            if let Some(plan_at) = compute_plan_at(todo.due_date, next_trigger, now) {
+                if plan_at <= range_end {
+                    let mut item = preview.clone();
+                    item.plan_at = Some(plan_at.to_rfc3339());
+                    next.push(item);
+                }
+            }
+
+            stale.push(preview);
+        }
+
+        overdue.sort_by(|a, b| a.due_date.cmp(&b.due_date));
+        next.sort_by(|a, b| a.plan_at.cmp(&b.plan_at));
+        stale.truncate(top_n);
+
+        Ok(TimePlannerDto {
+            next,
+            overdue,
+            stale,
+        })
+    }
+
     pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
         TodoRepository::list_all_tags(db)
     }
@@ -376,6 +423,43 @@ fn normalize_page(page: &mut u32, page_size: &mut u32) -> Result<(), AppError> {
         });
     }
     Ok(())
+}
+
+fn planner_preview_from(
+    todo: &crate::domain::todo::Todo,
+    next_trigger: Option<DateTime<Utc>>,
+) -> TodoPlannerPreviewDto {
+    TodoPlannerPreviewDto {
+        id: todo.id.clone(),
+        title: todo.title.clone(),
+        status: todo.status,
+        priority: todo.priority,
+        due_date: todo.due_date.map(|value| value.to_rfc3339()),
+        created_at: todo.created_at.to_rfc3339(),
+        updated_at: todo.updated_at.to_rfc3339(),
+        tags: todo.tags.clone(),
+        next_trigger_at: next_trigger.map(|value| value.to_rfc3339()),
+        plan_at: None,
+    }
+}
+
+fn compute_plan_at(
+    due: Option<DateTime<Utc>>,
+    next_trigger: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let mut candidates = Vec::new();
+    if let Some(due_at) = due {
+        if due_at >= now {
+            candidates.push(due_at);
+        }
+    }
+    if let Some(trigger_at) = next_trigger {
+        if trigger_at >= now {
+            candidates.push(trigger_at);
+        }
+    }
+    candidates.into_iter().min()
 }
 
 fn validate_title(title: &str) -> Result<(), AppError> {

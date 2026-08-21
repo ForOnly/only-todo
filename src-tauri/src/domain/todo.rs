@@ -159,6 +159,54 @@ pub struct FocusBoardDto {
     pub due_today: Vec<TodoDto>,
 }
 
+/// 时间规划面板查询
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct ListTimePlannerQuery {
+    #[serde(default = "default_planner_range_days")]
+    #[ts(type = "number")]
+    pub range_days: u32,
+    #[serde(default = "default_planner_top_n")]
+    #[ts(type = "number")]
+    pub top_n: u32,
+}
+
+fn default_planner_range_days() -> u32 {
+    7
+}
+
+fn default_planner_top_n() -> u32 {
+    5
+}
+
+/// 规划面板任务摘要（含下次提醒）
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct TodoPlannerPreviewDto {
+    pub id: String,
+    pub title: String,
+    pub status: TodoStatus,
+    pub priority: Priority,
+    pub due_date: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub tags: Vec<String>,
+    pub next_trigger_at: Option<String>,
+    /// min(未来 due, 未来提醒)；供 Next 区排序
+    pub plan_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct TimePlannerDto {
+    pub next: Vec<TodoPlannerPreviewDto>,
+    pub overdue: Vec<TodoPlannerPreviewDto>,
+    pub stale: Vec<TodoPlannerPreviewDto>,
+}
+
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, rename_all = "camelCase")]

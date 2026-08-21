@@ -23,8 +23,8 @@ use commands::{
     settings::{get_appearance, get_settings, update_settings},
     todo::{
         create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags,
-        list_focus_board, list_todos, list_workbench_todos, restore_todo, transition_todo,
-        update_todo,
+        list_focus_board, list_time_planner, list_todos, list_workbench_todos, restore_todo,
+        transition_todo, update_todo,
     },
     window::{
         companion_click_chrome, companion_collapse_to_strip, companion_drag_ended,
@@ -109,6 +109,7 @@ pub fn run() {
             list_todos,
             list_workbench_todos,
             list_focus_board,
+            list_time_planner,
             list_all_tags,
             get_allowed_transitions,
             transition_todo,

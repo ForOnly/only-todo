@@ -4,8 +4,9 @@ import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
+import AppTagChip from "@/components/common/AppTagChip.vue";
 import type { FocusBoardDto, SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
-import { formatDueDate, isOverdue } from "@/utils/date";
+import { formatRelativeAge, formatRelativeDue, getOverdueDaysOnly } from "@/utils/timeMeta";
 import { sortKeysForView } from "@/utils/listSort";
 
 const props = defineProps<{
@@ -58,7 +59,6 @@ const sortByModel = computed({
 
 const viewTitle = computed(() => {
   if (props.searching) return t("list.searchTitle");
-  if (props.grouped) return t("modes.focus");
   if (props.view === "tag" && props.activeTag) {
     return t("views.tagTitle", { tag: props.activeTag });
   }
@@ -69,13 +69,9 @@ const emptyCopy = computed(() => {
   if (props.searching) {
     return { title: t("list.empty.searchTitle"), hint: t("list.empty.searchHint") };
   }
-  if (props.grouped) {
-    return {
-      title: t("list.empty.focusTitle"),
-      hint: t("list.empty.focusHint"),
-    };
-  }
   switch (props.view) {
+    case "today":
+      return { title: t("list.empty.focusTitle"), hint: t("list.empty.focusHint") };
     case "trash":
       return { title: t("list.empty.trashTitle"), hint: t("list.empty.trashHint") };
     case "archived":
@@ -91,6 +87,8 @@ const emptyCopy = computed(() => {
 });
 
 const groups = computed<ListGroup[]>(() => {
+  if (props.todos.length === 0) return [];
+
   if (props.grouped && !props.searching) {
     return [
       { id: "overdue", title: t("focus.overdue"), items: props.focusBoard.overdue },
@@ -98,13 +96,13 @@ const groups = computed<ListGroup[]>(() => {
       { id: "dueToday", title: t("focus.dueToday"), items: props.focusBoard.dueToday },
     ].filter((group) => group.items.length > 0);
   }
-  if (props.todos.length === 0) return [];
+
   return [{ id: "flat", title: null, items: props.todos }];
 });
 
 const showLoadingHint = computed(() => props.loading && props.todos.length === 0);
 const isRefreshing = computed(() => props.loading && props.todos.length > 0);
-const showPagination = computed(() => !props.grouped && props.total > props.pageSize);
+const showPagination = computed(() => props.total > props.pageSize);
 
 function canToggle(todo: TodoDto): boolean {
   return !todo.deletedAt && (todo.status === "Todo" || todo.status === "Doing" || todo.status === "Done");
@@ -126,6 +124,36 @@ function visibleTags(todo: TodoDto): string[] {
 
 function extraTagCount(todo: TodoDto): number {
   return Math.max(0, todo.tags.length - 2);
+}
+
+function compactRelative(iso: string | null | undefined): string | null {
+  const relative = formatRelativeAge(iso, t);
+  return relative ? relative.replace(/\s/g, "") : null;
+}
+
+function createdTimeToken(todo: TodoDto): string {
+  const createdRelative = compactRelative(todo.createdAt);
+  return createdRelative ? t("timeMeta.createdAgoSuffix", { time: createdRelative }) : "—";
+}
+
+function dueTimeToken(todo: TodoDto): string | null {
+  if (!todo.dueDate) return null;
+  const overdueDays = getOverdueDaysOnly(todo.dueDate, todo.status);
+  if (overdueDays) {
+    const daysAgo = t("timeMeta.daysAgo", { n: overdueDays }).replace(/\s/g, "");
+    return t("timeMeta.overdueAgoSuffix", { time: daysAgo });
+  }
+  const dueRelative = formatRelativeDue(todo.dueDate, todo.status, t);
+  if (!dueRelative) return null;
+  return t("timeMeta.dueAgoSuffix", { time: dueRelative.replace(/\s/g, "") });
+}
+
+/** 有截止则「截止/创建」，否则仅创建 */
+function listMetaToken(todo: TodoDto): string {
+  const created = createdTimeToken(todo);
+  const due = dueTimeToken(todo);
+  if (due) return `${due}/${created}`;
+  return created;
 }
 
 function submitQuickAdd() {
@@ -180,7 +208,7 @@ function submitQuickAdd() {
       </li>
 
       <template v-for="group in groups" :key="group.id">
-        <li v-if="group.title" class="group-head">{{ group.title }}</li>
+        <li v-if="group.title" class="group-head" :data-group="group.id">{{ group.title }}</li>
         <li
           v-for="todo in group.items"
           :key="todo.id"
@@ -189,6 +217,7 @@ function submitQuickAdd() {
           :class="{
             active: todo.id === selectedId,
             done: todo.status === 'Done',
+            'overdue-row': group.id === 'overdue',
           }"
           @click="onRowClick(todo)"
           @keydown.enter.prevent="onRowClick(todo)"
@@ -203,21 +232,31 @@ function submitQuickAdd() {
             @click="onCheck(todo, $event)"
           />
           <div class="body">
-            <div class="title-row">
-              <span class="title">{{ todo.title }}</span>
-              <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+            <div class="title-meta-row">
+              <div class="title-row">
+                <span class="title">{{ todo.title }}</span>
+                <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+              </div>
+              <div class="meta-right">
+                <span
+                  class="meta-single"
+                  :class="{ 'due-overdue': getOverdueDaysOnly(todo.dueDate, todo.status) }"
+                >
+                  {{ listMetaToken(todo) }}
+                </span>
+              </div>
             </div>
-            <div v-if="todo.dueDate || todo.tags.length" class="meta">
-              <span
-                v-if="todo.dueDate"
-                :class="{ 'due-overdue': isOverdue(todo.dueDate, todo.status) }"
-              >
-                {{ formatDueDate(todo.dueDate) }}
-              </span>
-              <span v-for="tag in visibleTags(todo)" :key="tag" class="chip">{{ tag }}</span>
-              <span v-if="extraTagCount(todo)" class="chip more">
-                {{ $t("list.moreTags", { n: extraTagCount(todo) }) }}
-              </span>
+            <div v-if="todo.tags.length" class="tag-row">
+              <AppTagChip
+                v-for="tag in visibleTags(todo)"
+                :key="tag"
+                :label="tag"
+              />
+              <AppTagChip
+                v-if="extraTagCount(todo)"
+                :label="$t('list.moreTags', { n: extraTagCount(todo) })"
+                more
+              />
             </div>
           </div>
         </li>
@@ -326,6 +365,22 @@ function submitQuickAdd() {
   font-weight: 650;
   letter-spacing: 0.04em;
   color: var(--color-muted);
+}
+
+.group-head[data-group="overdue"] {
+  color: var(--color-overdue);
+}
+
+.group-head[data-group="doing"] {
+  color: var(--color-accent);
+}
+
+.todo-item.overdue-row {
+  background: rgba(185, 28, 28, 0.04);
+}
+
+.todo-item.overdue-row:hover {
+  background: rgba(185, 28, 28, 0.08);
 }
 
 .quick-add {
@@ -443,6 +498,8 @@ function submitQuickAdd() {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
 .title {
@@ -462,6 +519,28 @@ function submitQuickAdd() {
   color: var(--color-accent);
 }
 
+.title-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.meta-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  text-align: right;
+  color: var(--color-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.meta-single {
+  white-space: nowrap;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;
@@ -474,18 +553,16 @@ function submitQuickAdd() {
 .due-overdue {
   color: var(--color-overdue);
   font-weight: 600;
+  white-space: nowrap;
 }
 
-.chip {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--color-surface-muted);
-  color: var(--color-text-secondary);
-}
-
-.chip.more {
-  background: transparent;
-  color: var(--color-muted);
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .empty {

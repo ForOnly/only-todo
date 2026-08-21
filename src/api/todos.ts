@@ -4,10 +4,12 @@ import type {
   CreateTodoDto,
   FocusBoardDto,
   ListFocusBoardQuery,
+  ListTimePlannerQuery,
   ListTodoQuery,
   ListWorkbenchQuery,
   PaginatedTodos,
   StatusActionDto,
+  TimePlannerDto,
   TodoDto,
   TodoStatus,
   UpdateTodoDto,
@@ -73,6 +75,18 @@ export async function listFocusBoard(
     query: {
       sortBy: query.sortBy ?? "priority",
       sortOrder: query.sortOrder ?? "desc",
+    },
+  });
+}
+
+/** Tauri Command: list_time_planner */
+export async function listTimePlanner(
+  query: Partial<ListTimePlannerQuery> = {},
+): Promise<TimePlannerDto> {
+  return invoke("list_time_planner", {
+    query: {
+      rangeDays: query.rangeDays ?? 7,
+      topN: query.topN ?? 5,
     },
   });
 }

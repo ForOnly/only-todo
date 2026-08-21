@@ -98,6 +98,7 @@ export function useTodos(): UseTodosReturn {
         todos.value = [...board.overdue, ...board.doing, ...board.dueToday];
         total.value = todos.value.length;
         page.value = 1;
+        pageSize.value = Math.max(pageSize.value, total.value);
         return;
       }
 

@@ -4,8 +4,8 @@ use crate::broadcast;
 use crate::domain::{
     status::{StatusActionDto, TodoStatus},
     todo::{
-        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTodoQuery, ListWorkbenchQuery,
-        PaginatedResponse, TodoDto, UpdateTodoDto,
+        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTimePlannerQuery, ListTodoQuery,
+        ListWorkbenchQuery, PaginatedResponse, TimePlannerDto, TodoDto, UpdateTodoDto,
     },
 };
 use crate::errors::AppError;
@@ -79,6 +79,14 @@ pub fn list_focus_board(
     query: ListFocusBoardQuery,
 ) -> Result<FocusBoardDto, AppError> {
     TodoService::list_focus_board(&state.db, query)
+}
+
+#[tauri::command]
+pub fn list_time_planner(
+    state: State<AppState>,
+    query: ListTimePlannerQuery,
+) -> Result<TimePlannerDto, AppError> {
+    TodoService::list_time_planner(&state.db, query)
 }
 
 #[tauri::command]

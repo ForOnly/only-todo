@@ -435,6 +435,42 @@ impl TodoRepository {
             })
         })
     }
+
+    /// 活跃 Todo/Doing + 最近启用的下次提醒（按 updated_at 升序，供 stale 截取）
+    pub fn list_active_for_planner(
+        db: &Database,
+    ) -> Result<Vec<(Todo, Option<DateTime<Utc>>)>, AppError> {
+        db.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.tags, t.created_at, t.updated_at, t.completed_at, t.deleted_at,
+                            (SELECT MIN(r.next_trigger_at) FROM reminders r WHERE r.todo_id = t.id AND r.enabled = 1) AS next_trigger
+                     FROM todos t
+                     WHERE t.deleted_at IS NULL AND t.status IN ('Todo', 'Doing')
+                     ORDER BY t.updated_at ASC",
+                )
+                .map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let todo = map_row(row)?;
+                    let next_trigger: Option<String> = row.get(11)?;
+                    let next = next_trigger.map(|value| parse_datetime_unchecked(&value));
+                    Ok((todo, next))
+                })
+                .map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?;
+            let mut items = Vec::new();
+            for row in rows {
+                items.push(row.map_err(|error| AppError::DbError {
+                    message: error.to_string(),
+                })?);
+            }
+            Ok(items)
+        })
+    }
 }
 
 fn sync_todo_tags(

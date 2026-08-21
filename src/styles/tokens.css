@@ -23,6 +23,12 @@
   --color-success: #15803d;
   --color-overlay: rgba(15, 23, 42, 0.45);
 
+  /* 标签 chip（列表/Inspector 元数据）*/
+  --color-tag-bg: rgba(100, 116, 139, 0.12);
+  --color-tag-border: rgba(100, 116, 139, 0.28);
+  --color-tag-text: var(--color-text-secondary);
+  --color-tag-prefix: var(--color-muted);
+
   --color-priority-urgent: #dc2626;
   --color-priority-high: #ea580c;
   --color-priority-medium: #1d4ed8;
@@ -66,6 +72,12 @@
     --color-overdue: #fca5a5;
     --color-success: #4ade80;
     --color-overlay: rgba(0, 0, 0, 0.55);
+
+  /* 标签 chip（列表/Inspector 元数据）*/
+  --color-tag-bg: rgba(148, 163, 184, 0.14);
+  --color-tag-border: rgba(148, 163, 184, 0.30);
+  --color-tag-text: var(--color-text-secondary);
+  --color-tag-prefix: var(--color-muted);
 
     --color-priority-urgent: #f87171;
     --color-priority-high: #fb923c;

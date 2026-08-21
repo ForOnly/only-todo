@@ -6,6 +6,7 @@ import AppButton from "@/components/common/AppButton.vue";
 import AppDateTimePicker from "@/components/common/AppDateTimePicker.vue";
 import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
+import AppTagChip from "@/components/common/AppTagChip.vue";
 import {
   PRIORITY_OPTIONS,
   REPEAT_TYPE_OPTIONS,
@@ -17,6 +18,11 @@ import {
 } from "@/api/types";
 import type { SaveStatus } from "@/composables/useTodoDetail";
 import { formatDate, toLocalDatetimeInput } from "@/utils/date";
+import {
+  formatAbsoluteDateTime,
+  formatRelativeAge,
+  formatRelativeDue,
+} from "@/utils/timeMeta";
 import { statusActionLabel, useStatusActions } from "@/utils/statusActions";
 
 const props = defineProps<{
@@ -115,6 +121,38 @@ const tagSuggestions = computed(() => {
     .filter((tag) => !current.has(tag.toLowerCase()))
     .filter((tag) => !q || tag.toLowerCase().includes(q))
     .slice(0, 8);
+});
+
+const timeLines = computed(() => {
+  const detail = props.detail;
+  if (!detail) return [];
+  const lines: { key: string; label: string; value: string }[] = [
+    {
+      key: "created",
+      label: t("inspector.createdAt"),
+      value: formatAbsoluteDateTime(detail.createdAt),
+    },
+    {
+      key: "updated",
+      label: t("inspector.updatedAt"),
+      value: formatRelativeAge(detail.updatedAt, t) ?? formatAbsoluteDateTime(detail.updatedAt),
+    },
+  ];
+  if (detail.dueDate) {
+    lines.push({
+      key: "due",
+      label: t("inspector.dueDate"),
+      value: formatRelativeDue(detail.dueDate, detail.status, t) ?? formatAbsoluteDateTime(detail.dueDate),
+    });
+  }
+  if (detail.completedAt) {
+    lines.push({
+      key: "completed",
+      label: t("inspector.completedAt"),
+      value: formatAbsoluteDateTime(detail.completedAt),
+    });
+  }
+  return lines;
 });
 
 function onField() {
@@ -274,20 +312,26 @@ function onSnooze(reminderId: string, value: string) {
           <AppDateTimePicker v-model="dueModel" />
         </label>
 
+        <section class="time-block" :aria-label="$t('inspector.timeSection')">
+          <h3>{{ $t("inspector.timeSection") }}</h3>
+          <dl class="time-lines">
+            <div v-for="line in timeLines" :key="line.key" class="time-line">
+              <dt>{{ line.label }}</dt>
+              <dd>{{ line.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
         <div class="app-field">
           <span>{{ $t("inspector.tags") }}</span>
           <div class="chips">
-            <span v-for="tag in editTags" :key="tag" class="chip">
-              {{ tag }}
-              <button
-                type="button"
-                class="chip-x"
-                :aria-label="$t('inspector.removeTag', { tag })"
-                @click="removeTag(tag)"
-              >
-                ×
-              </button>
-            </span>
+            <AppTagChip
+              v-for="tag in editTags"
+              :key="tag"
+              :label="tag"
+              removable
+              @remove="removeTag"
+            />
           </div>
           <input
             v-model="tagInput"
@@ -296,15 +340,13 @@ function onSnooze(reminderId: string, value: string) {
             @keydown="onTagKeydown"
           />
           <div v-if="tagSuggestions.length" class="suggestions">
-            <button
+            <AppTagChip
               v-for="tag in tagSuggestions"
               :key="tag"
-              type="button"
-              class="suggest"
-              @click="addTag(tag)"
-            >
-              {{ tag }}
-            </button>
+              :label="tag"
+              clickable
+              @click="addTag"
+            />
           </div>
         </div>
 
@@ -491,27 +533,6 @@ function onSnooze(reminderId: string, value: string) {
   min-height: 8px;
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-muted);
-  font-size: 12px;
-  color: var(--color-text-secondary);
-}
-
-.chip-x {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--color-muted);
-  padding: 0;
-  font-size: 14px;
-  line-height: 1;
-}
-
 .suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -519,26 +540,37 @@ function onSnooze(reminderId: string, value: string) {
   margin-top: 6px;
 }
 
-.suggest {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.suggest:hover {
-  background: var(--color-surface-muted);
-}
-
-.reminders h3 {
+.reminders h3,
+.time-block h3 {
   margin: 8px 0 10px;
   font-size: 13px;
   color: var(--color-muted);
+}
+
+.time-lines {
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.time-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.time-line dt {
+  margin: 0;
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.time-line dd {
+  margin: 0;
+  text-align: right;
+  color: var(--color-text-secondary);
 }
 
 .reminder-list {
