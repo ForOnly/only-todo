@@ -17,7 +17,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "plugins": [{ "name": "@vue/typescript-plugin", "languages": ["vue"] }],
+    // "plugins": [{ "name": "@vue/typescript-plugin", "languages": ["vue"] }],
 
     /* Linting */
     "strict": true,

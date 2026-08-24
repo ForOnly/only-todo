@@ -1,19 +1,33 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+
+import CalendarPanel from "./CalendarPanel.vue";
+import DateTimePanel from "./DateTimePanel.vue";
 
 const props = withDefaults(
   defineProps<{
     modelValue: string;
     disabled?: boolean;
     clearable?: boolean;
-    compact?: boolean;
+    mode?: "date" | "datetime";
+    precision?: "minute" | "second";
+    firstDayOfWeek?: 0 | 1;
+    min?: string;
+    max?: string;
+    placeholder?: string;
+    disabledDate?: (d: Date) => boolean;
+    format?: Intl.DateTimeFormatOptions;
+    size?: "default" | "compact";
     teleport?: boolean;
   }>(),
   {
     disabled: false,
     clearable: true,
-    compact: false,
+    mode: "datetime",
+    precision: "minute",
+    firstDayOfWeek: 0,
+    size: "default",
     teleport: true,
   },
 );
@@ -25,198 +39,60 @@ const emit = defineEmits<{
 const { t, locale } = useI18n();
 
 const open = ref(false);
-const triggerRef = ref<HTMLButtonElement | null>(null);
-const panelRef = ref<HTMLElement | null>(null);
+const triggerRef = ref<HTMLElement | null>(null);
 const panelStyle = ref<Record<string, string>>({});
+
+// 本地 buffer：选中后暂存，确认后才 emit
+const bufferValue = ref("");
 const viewYear = ref(new Date().getFullYear());
-const viewMonth = ref(new Date().getMonth()); // 0-11
+const viewMonth = ref(new Date().getMonth());
 const hour = ref(0);
 const minute = ref(0);
-/** 时分展示用两位文本，避免原生 number 步进器 */
-const hourText = ref("00");
-const minuteText = ref("00");
+const second = ref(0);
 
+// ── 日期范围解析 ──
+function parseMinMax(value: string): Date | null {
+  if (!value) return null;
+  let d = new Date(value);
+  if (!Number.isNaN(d.getTime())) return d;
+  d = new Date(value + "T00:00");
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const minDate = computed(() => (props.min ? parseMinMax(props.min) : null));
+const maxDate = computed(() => (props.max ? parseMinMax(props.max) : null));
+
+// ── 展示文本 ──
 function parseValue(v: string): Date | null {
   if (!v.trim()) return null;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function toValue(y: number, m: number, day: number, h: number, min: number): string {
-  return `${y}-${pad(m + 1)}-${pad(day)}T${pad(h)}:${pad(min)}`;
-}
-
 const displayText = computed(() => {
+  // 展示当前 modelValue（已确认的值），不是 buffer
   const d = parseValue(props.modelValue);
-  if (!d) return t("datetime.placeholder");
+  if (!d) return props.placeholder ?? t("datetime.placeholder");
+  if (props.format) {
+    return d.toLocaleString(locale.value, props.format);
+  }
   return d.toLocaleString(locale.value, {
     year: "numeric",
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    hour: props.mode === "datetime" ? ("2-digit" as const) : undefined,
+    minute: props.mode === "datetime" ? ("2-digit" as const) : undefined,
+    second: props.precision === "second" ? ("2-digit" as const) : undefined,
   });
 });
 
-const monthTitle = computed(() => {
-  const d = new Date(viewYear.value, viewMonth.value, 1);
-  return d.toLocaleString(locale.value, { year: "numeric", month: "long" });
-});
-
-const weekdays = computed(() => {
-  // 从已知周日生成周日到周六的短星期文案
-  const start = new Date(2024, 0, 7);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    return d.toLocaleDateString(locale.value, { weekday: "short" });
-  });
-});
-
-type DayCell = { day: number; inMonth: boolean; key: string };
-
-const dayCells = computed((): DayCell[] => {
-  const first = new Date(viewYear.value, viewMonth.value, 1);
-  const startPad = first.getDay(); // 0 Sun
-  const daysInMonth = new Date(viewYear.value, viewMonth.value + 1, 0).getDate();
-  const prevDays = new Date(viewYear.value, viewMonth.value, 0).getDate();
-  const cells: DayCell[] = [];
-  for (let i = 0; i < startPad; i++) {
-    const day = prevDays - startPad + i + 1;
-    cells.push({
-      day,
-      inMonth: false,
-      key: `p-${day}`,
-    });
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    cells.push({ day, inMonth: true, key: `c-${day}` });
-  }
-  while (cells.length % 7 !== 0) {
-    const day = cells.length - startPad - daysInMonth + 1;
-    cells.push({ day, inMonth: false, key: `n-${day}` });
-  }
-  return cells;
-});
-
-const selectedDay = computed(() => {
-  const d = parseValue(props.modelValue);
-  if (!d) return null;
-  if (d.getFullYear() !== viewYear.value || d.getMonth() !== viewMonth.value) return null;
-  return d.getDate();
-});
-
-function syncTimeTexts() {
-  hourText.value = pad(hour.value);
-  minuteText.value = pad(minute.value);
-}
-
-function syncFromModel() {
-  const d = parseValue(props.modelValue) ?? new Date();
-  viewYear.value = d.getFullYear();
-  viewMonth.value = d.getMonth();
-  hour.value = d.getHours();
-  minute.value = d.getMinutes();
-  syncTimeTexts();
-}
-
-function clampHour(v: number) {
-  if (!Number.isFinite(v)) return 0;
-  return Math.min(23, Math.max(0, Math.round(v)));
-}
-function clampMinute(v: number) {
-  if (!Number.isFinite(v)) return 0;
-  return Math.min(59, Math.max(0, Math.round(v)));
-}
-
-function normalizeTimeFields() {
-  hour.value = clampHour(hour.value);
-  minute.value = clampMinute(minute.value);
-  syncTimeTexts();
-}
-
-function onHourInput(event: Event) {
-  const raw = (event.target as HTMLInputElement).value.replace(/\D/g, "").slice(0, 2);
-  hourText.value = raw;
-}
-
-function onMinuteInput(event: Event) {
-  const raw = (event.target as HTMLInputElement).value.replace(/\D/g, "").slice(0, 2);
-  minuteText.value = raw;
-}
-
-function commitHour() {
-  const parsed = hourText.value.trim() === "" ? Number.NaN : Number(hourText.value);
-  hour.value = clampHour(parsed);
-  syncTimeTexts();
-  applyTime();
-}
-
-function commitMinute() {
-  const parsed = minuteText.value.trim() === "" ? Number.NaN : Number(minuteText.value);
-  minute.value = clampMinute(parsed);
-  syncTimeTexts();
-  applyTime();
-}
-
-function emitCurrent(day: number) {
-  normalizeTimeFields();
-  emit(
-    "update:modelValue",
-    toValue(viewYear.value, viewMonth.value, day, hour.value, minute.value),
-  );
-}
-
-function pickDay(cell: DayCell) {
-  if (!cell.inMonth) return;
-  emitCurrent(cell.day);
-}
-
-function applyTime() {
-  normalizeTimeFields();
-  const d = parseValue(props.modelValue);
-  // 尚未选定日期时只改本地时分，不强制写成当月 1 日
-  if (!d) return;
-  emit(
-    "update:modelValue",
-    toValue(d.getFullYear(), d.getMonth(), d.getDate(), hour.value, minute.value),
-  );
-}
-
-function clear() {
-  emit("update:modelValue", "");
-  open.value = false;
-}
-
-function prevMonth() {
-  if (viewMonth.value === 0) {
-    viewMonth.value = 11;
-    viewYear.value -= 1;
-  } else {
-    viewMonth.value -= 1;
-  }
-}
-
-function nextMonth() {
-  if (viewMonth.value === 11) {
-    viewMonth.value = 0;
-    viewYear.value += 1;
-  } else {
-    viewMonth.value += 1;
-  }
-}
-
-async function placePanel() {
-  await nextTick();
+// ── 面板定位 ──
+function placePanel() {
   const el = triggerRef.value;
   if (!el) return;
   const rect = el.getBoundingClientRect();
-  const panelH = panelRef.value?.offsetHeight ?? 320;
-  const panelW = panelRef.value?.offsetWidth ?? (props.compact ? 260 : 300);
+  const panelW = 300;
+  const panelH = 380;
   const spaceBelow = window.innerHeight - rect.bottom;
   const openUp = spaceBelow < panelH + 8 && rect.top > spaceBelow;
   let top = openUp ? Math.max(8, rect.top - panelH - 4) : rect.bottom + 4;
@@ -232,81 +108,56 @@ async function placePanel() {
   };
 }
 
-async function toggle() {
+// ── 打开面板 ──
+function openPanel() {
   if (props.disabled) return;
-  if (open.value) {
-    open.value = false;
-    return;
-  }
-  syncFromModel();
+  const d = parseValue(props.modelValue) ?? new Date();
+  viewYear.value = d.getFullYear();
+  viewMonth.value = d.getMonth();
+  hour.value = d.getHours();
+  minute.value = d.getMinutes();
+  second.value = d.getSeconds();
+  bufferValue.value = props.modelValue;
+  placePanel();
   open.value = true;
-  await placePanel();
 }
 
-function onDocPointer(event: PointerEvent) {
-  if (!open.value) return;
-  const t = event.target as Node;
-  if (triggerRef.value?.contains(t) || panelRef.value?.contains(t)) return;
+// ── 事件 ──
+function onSelect(value: string) {
+  // 选择日期时只更新 buffer，不 emit
+  bufferValue.value = value;
+}
+
+function onClear() {
+  bufferValue.value = "";
+  emit("update:modelValue", "");
   open.value = false;
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (!open.value) return;
-  if (event.key === "Escape") {
-    // capture + stopImmediatePropagation：避免父 AppModal 同帧也响应 Esc
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    open.value = false;
-  }
-}
-
-function onScrollClose(event: Event) {
-  if (!open.value) return;
-  const t = event.target;
-  // 面板自身滚动不关闭
-  if (t instanceof Node && panelRef.value?.contains(t)) return;
+function handlePanelToday() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+  const h = props.mode === "datetime" ? now.getHours() : 0;
+  const min = props.mode === "datetime" ? now.getMinutes() : 0;
+  const sec = props.precision === "second" && props.mode === "datetime" ? now.getSeconds() : 0;
+  const val = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  bufferValue.value = val;
+  emit("update:modelValue", val);
   open.value = false;
 }
 
-function bindOpenListeners() {
-  document.addEventListener("scroll", onScrollClose, true);
-}
-
-function unbindOpenListeners() {
-  document.removeEventListener("scroll", onScrollClose, true);
-}
-
-watch(open, (v) => {
-  if (v) {
-    bindOpenListeners();
-    void placePanel();
-  } else {
-    unbindOpenListeners();
+function handlePanelConfirm() {
+  if (bufferValue.value) {
+    emit("update:modelValue", bufferValue.value);
   }
-});
-
-watch(
-  () => props.modelValue,
-  () => {
-    if (!open.value) return;
-    syncFromModel();
-  },
-);
-
-onMounted(() => {
-  document.addEventListener("pointerdown", onDocPointer, true);
-  window.addEventListener("keydown", onKeydown, true);
-});
-
-onUnmounted(() => {
-  document.removeEventListener("pointerdown", onDocPointer, true);
-  window.removeEventListener("keydown", onKeydown, true);
-  unbindOpenListeners();
-});
+  open.value = false;
+}
 </script>
 
 <template>
-  <div class="app-datetime" :class="{ compact, disabled }">
+  <div class="app-datetime" :class="{ compact: size === 'compact', disabled }">
     <button
       ref="triggerRef"
       type="button"
@@ -314,78 +165,43 @@ onUnmounted(() => {
       :class="{ empty: !modelValue }"
       :disabled="disabled"
       :aria-expanded="open"
-      @click="toggle"
+      @click="openPanel"
     >
       {{ displayText }}
     </button>
-    <Teleport to="body" :disabled="teleport === false">
-      <div v-if="open" ref="panelRef" class="panel" :style="panelStyle">
-        <header class="month-nav">
-          <button type="button" class="nav-btn" :aria-label="$t('datetime.prevMonth')" @click="prevMonth">
-            ‹
-          </button>
-          <span class="month-title">{{ monthTitle }}</span>
-          <button type="button" class="nav-btn" :aria-label="$t('datetime.nextMonth')" @click="nextMonth">
-            ›
-          </button>
-        </header>
-        <div class="weekdays">
-          <span v-for="w in weekdays" :key="w">{{ w }}</span>
-        </div>
-        <div class="days">
-          <button
-            v-for="cell in dayCells"
-            :key="cell.key"
-            type="button"
-            class="day"
-            :class="{
-              muted: !cell.inMonth,
-              selected: cell.inMonth && cell.day === selectedDay,
-            }"
-            :disabled="!cell.inMonth"
-            @click="pickDay(cell)"
-          >
-            {{ cell.day }}
-          </button>
-        </div>
-        <div class="time-row">
-          <label>
-            <span>{{ $t("datetime.hour") }}</span>
-            <input
-              :value="hourText"
-              type="text"
-              inputmode="numeric"
-              maxlength="2"
-              autocomplete="off"
-              @input="onHourInput"
-              @change="commitHour"
-              @blur="commitHour"
-            />
-          </label>
-          <label>
-            <span>{{ $t("datetime.minute") }}</span>
-            <input
-              :value="minuteText"
-              type="text"
-              inputmode="numeric"
-              maxlength="2"
-              autocomplete="off"
-              @input="onMinuteInput"
-              @change="commitMinute"
-              @blur="commitMinute"
-            />
-          </label>
-        </div>
-        <div class="actions">
-          <button v-if="clearable" type="button" class="link-btn" @click="clear">
-            {{ $t("datetime.clear") }}
-          </button>
-          <button type="button" class="link-btn primary" @click="open = false">
-            {{ $t("common.confirm") }}
-          </button>
-        </div>
-      </div>
-    </Teleport>
+    <DateTimePanel
+      :open="open"
+      :teleport="teleport"
+      :panel-style="panelStyle"
+      :trigger-ref="triggerRef"
+      @close="open = false"
+    >
+      <CalendarPanel
+        :view-year="viewYear"
+        :view-month="viewMonth"
+        :hour="hour"
+        :minute="minute"
+        :second="second"
+        :selected="bufferValue"
+        :mode="mode"
+        :precision="precision"
+        :first-day-of-week="firstDayOfWeek"
+        :min-date="minDate"
+        :max-date="maxDate"
+        :clearable="clearable"
+        :disabled-date="disabledDate"
+        :size="size"
+        @update:view-year="viewYear = $event"
+        @update:view-month="viewMonth = $event"
+        @update:hour="hour = $event"
+        @update:minute="minute = $event"
+        @update:second="second = $event"
+        @select="onSelect"
+        @clear="onClear"
+        @today="handlePanelToday"
+        @confirm="handlePanelConfirm"
+      />
+    </DateTimePanel>
   </div>
 </template>
 
@@ -425,132 +241,5 @@ onUnmounted(() => {
 .trigger:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.panel {
-  width: 288px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-md);
-  color: var(--color-text);
-}
-
-.month-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.month-title {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.nav-btn {
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-}
-
-.nav-btn:hover {
-  background: var(--color-bg-accent);
-}
-
-.weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  margin-bottom: 4px;
-  font-size: 11px;
-  color: var(--color-muted);
-  text-align: center;
-}
-
-.days {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-
-.day {
-  aspect-ratio: 1;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.day:hover:not(:disabled) {
-  background: var(--color-bg-accent);
-}
-
-.day.muted,
-.day:disabled {
-  color: var(--color-muted);
-  opacity: 0.45;
-  cursor: default;
-}
-
-.day.selected {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 600;
-}
-
-.time-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.time-row label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  font-size: 12px;
-  color: var(--color-muted);
-}
-
-.time-row input {
-  padding: 6px 8px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  color: var(--color-text);
-  background: var(--color-surface);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.link-btn {
-  border: none;
-  background: transparent;
-  color: var(--color-muted);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  padding: 4px 8px;
-}
-
-.link-btn.primary {
-  color: var(--color-accent);
-  font-weight: 600;
 }
 </style>
