@@ -57,9 +57,7 @@ export function localTodayDueInput(): string {
 }
 
 /** 截止日期筛选 → 查询范围（半开区间 [after, before)，与后端 count 对齐） */
-export function dueDateRangeForFilter(
-  filter: DueDateFilter,
-): { after?: string; before?: string } {
+export function dueDateRangeForFilter(filter: DueDateFilter): { after?: string; before?: string } {
   if (filter === "all") return {};
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());

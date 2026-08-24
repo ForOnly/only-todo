@@ -56,13 +56,7 @@ onUnmounted(() => {
 <template>
   <Teleport to="body" :disabled="teleport === false">
     <div v-if="open" class="modal-backdrop" @click.self="onBackdropClick">
-      <div
-        class="modal"
-        :class="{ compact }"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="title"
-      >
+      <div class="modal" :class="{ compact }" role="dialog" aria-modal="true" :aria-label="title">
         <header class="modal-header">
           <h2>{{ title }}</h2>
           <button

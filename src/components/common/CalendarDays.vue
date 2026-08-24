@@ -60,7 +60,9 @@ function pickDay(cell: DayCell) {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .day:hover:not(:disabled) {

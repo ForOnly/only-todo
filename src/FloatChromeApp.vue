@@ -58,9 +58,11 @@ function onKeydown(event: KeyboardEvent) {
   const current = session.value;
   if (!current || current.visibility !== "shown") return;
   if (current.panelMode === "preview" || current.panelMode === "pinned") {
-    void companionMinimize().then(applySession).catch((err) => {
-      console.error("chrome minimize failed", err);
-    });
+    void companionMinimize()
+      .then(applySession)
+      .catch((err) => {
+        console.error("chrome minimize failed", err);
+      });
   }
 }
 

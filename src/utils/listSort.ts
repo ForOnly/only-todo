@@ -1,13 +1,6 @@
 import type { ListDefaultSort, SortBy, SortOrder } from "@/api/types";
 
-const SORT_BY: SortBy[] = [
-  "priority",
-  "createdAt",
-  "updatedAt",
-  "completedAt",
-  "dueDate",
-  "title",
-];
+const SORT_BY: SortBy[] = ["priority", "createdAt", "updatedAt", "completedAt", "dueDate", "title"];
 
 /** 解析 settings.listDefaultSort（后端种子为 snake_case JSON） */
 export function parseListDefaultSort(raw: string | null | undefined): ListDefaultSort {

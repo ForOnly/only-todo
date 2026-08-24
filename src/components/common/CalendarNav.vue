@@ -93,10 +93,20 @@ function nextMonth() {
         :compact="size === 'compact'"
         :teleport="true"
       />
-      <button type="button" class="nav-btn" :aria-label="$t('datetime.prevMonth')" @click="prevMonth">
+      <button
+        type="button"
+        class="nav-btn"
+        :aria-label="$t('datetime.prevMonth')"
+        @click="prevMonth"
+      >
         ‹
       </button>
-      <button type="button" class="nav-btn" :aria-label="$t('datetime.nextMonth')" @click="nextMonth">
+      <button
+        type="button"
+        class="nav-btn"
+        :aria-label="$t('datetime.nextMonth')"
+        @click="nextMonth"
+      >
         ›
       </button>
     </div>

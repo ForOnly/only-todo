@@ -37,12 +37,7 @@ function onClick() {
     <span class="tag-label">{{ label }}</span>
   </button>
 
-  <span
-    v-else
-    class="tag-chip"
-    :class="{ 'tag-chip--more': more }"
-    :title="label"
-  >
+  <span v-else class="tag-chip" :class="{ 'tag-chip--more': more }" :title="label">
     <span v-if="!more" class="tag-prefix">#</span>
     <span class="tag-label">{{ label }}</span>
     <button
@@ -117,4 +112,3 @@ function onClick() {
   color: var(--color-accent);
 }
 </style>
-

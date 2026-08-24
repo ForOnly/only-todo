@@ -34,7 +34,9 @@ const statusLabel = computed(() => t(`status.${props.todo.status}`));
   <section class="peek" @click.stop @dblclick.stop="emit('edit')">
     <div class="peek-head">
       <span class="status-pill" :data-status="todo.status">{{ statusLabel }}</span>
-      <span class="priority-tag" :data-priority="todo.priority">{{ $t(`priority.${todo.priority}`) }}</span>
+      <span class="priority-tag" :data-priority="todo.priority">{{
+        $t(`priority.${todo.priority}`)
+      }}</span>
       <div v-if="todo.tags.length" class="head-tags">
         <AppTagChip v-for="tag in todo.tags" :key="tag" :label="tag" />
       </div>
@@ -44,7 +46,14 @@ const statusLabel = computed(() => t(`status.${props.todo.status}`));
     </div>
 
     <div class="peek-meta">
-      <span v-if="dueLabel" class="meta-item due" :class="{ overdue: todo.status !== 'Done' && todo.dueDate && new Date(todo.dueDate).getTime() < Date.now() }">
+      <span
+        v-if="dueLabel"
+        class="meta-item due"
+        :class="{
+          overdue:
+            todo.status !== 'Done' && todo.dueDate && new Date(todo.dueDate).getTime() < Date.now(),
+        }"
+      >
         {{ $t("inspector.dueDate") }}: {{ dueLabel }}
       </span>
       <span class="meta-item sep">·</span>
@@ -165,7 +174,9 @@ const statusLabel = computed(() => t(`status.${props.todo.status}`));
   font-weight: 600;
   cursor: pointer;
   margin-left: auto;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .edit-btn:hover {

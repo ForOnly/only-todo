@@ -311,7 +311,7 @@ impl TodoService {
         let now = Utc::now();
         let start_of_today = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
         let range_end = now + Duration::days(query.range_days.max(1) as i64);
-        let top_n = query.top_n.max(1).min(20) as usize;
+        let top_n = query.top_n.clamp(1, 20) as usize;
 
         let rows = TodoRepository::list_active_for_planner(db)?;
         let mut overdue = Vec::new();

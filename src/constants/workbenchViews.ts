@@ -15,11 +15,7 @@ export const DEFAULT_VIEW_OPTIONS: WorkbenchView[] = [
 
 export function isLibraryView(view: WorkbenchView): boolean {
   return (
-    view === "all" ||
-    view === "done" ||
-    view === "archived" ||
-    view === "trash" ||
-    view === "tag"
+    view === "all" || view === "done" || view === "archived" || view === "trash" || view === "tag"
   );
 }
 

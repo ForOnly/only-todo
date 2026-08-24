@@ -105,13 +105,7 @@ export type ListEventsQuery = Partial<{
 
 export type FloatDefaultMode = HomeShape;
 
-export type SortBy =
-  | "priority"
-  | "createdAt"
-  | "updatedAt"
-  | "completedAt"
-  | "dueDate"
-  | "title";
+export type SortBy = "priority" | "createdAt" | "updatedAt" | "completedAt" | "dueDate" | "title";
 export type SortOrder = "asc" | "desc";
 export type DueDateFilter = "all" | "today" | "overdue";
 

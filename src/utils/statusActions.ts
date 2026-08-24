@@ -8,11 +8,7 @@ import type { StatusActionDto, TodoStatus } from "@/api/types";
 export type StatusAction = StatusActionDto;
 
 /** 忽略后端中文 label，按 from→to 映射到 i18n */
-export function statusActionLabel(
-  from: TodoStatus,
-  to: TodoStatus,
-  t: Composer["t"],
-): string {
+export function statusActionLabel(from: TodoStatus, to: TodoStatus, t: Composer["t"]): string {
   if (to === "Doing") return t("statusAction.start");
   if (to === "Done") return t("statusAction.complete");
   if (to === "Archived") return t("statusAction.archive");

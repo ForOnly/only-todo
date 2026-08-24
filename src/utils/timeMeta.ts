@@ -156,4 +156,3 @@ export function formatListTimeToken(
 ): string | null {
   return formatRelativeDue(todo.dueDate, todo.status, t, nowMs);
 }
-

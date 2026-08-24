@@ -176,13 +176,7 @@ onUnmounted(() => {
       <span class="chevron" aria-hidden="true">▾</span>
     </button>
     <Teleport to="body" :disabled="teleport === false">
-      <ul
-        v-if="open"
-        ref="menuRef"
-        class="menu"
-        role="listbox"
-        :style="menuStyle"
-      >
+      <ul v-if="open" ref="menuRef" class="menu" role="listbox" :style="menuStyle">
         <li
           v-for="(opt, i) in options"
           :key="opt.value"

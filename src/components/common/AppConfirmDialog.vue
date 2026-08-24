@@ -9,9 +9,7 @@ import { resolveConfirm, useAppConfirmState } from "@/composables/useAppConfirm"
 const { t } = useI18n();
 const state = useAppConfirmState();
 
-const confirmLabel = computed(
-  () => state.confirmLabel || t("common.confirm"),
-);
+const confirmLabel = computed(() => state.confirmLabel || t("common.confirm"));
 const cancelLabel = computed(() => state.cancelLabel || t("common.cancel"));
 </script>
 
@@ -20,10 +18,7 @@ const cancelLabel = computed(() => state.cancelLabel || t("common.cancel"));
     <p class="message">{{ state.message }}</p>
     <div class="app-modal-actions">
       <AppButton variant="ghost" @click="resolveConfirm(false)">{{ cancelLabel }}</AppButton>
-      <AppButton
-        :variant="state.danger ? 'danger' : 'primary'"
-        @click="resolveConfirm(true)"
-      >
+      <AppButton :variant="state.danger ? 'danger' : 'primary'" @click="resolveConfirm(true)">
         {{ confirmLabel }}
       </AppButton>
     </div>

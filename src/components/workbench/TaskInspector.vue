@@ -18,11 +18,7 @@ import {
 } from "@/api/types";
 import type { SaveStatus } from "@/composables/useTodoDetail";
 import { formatDate, toLocalDatetimeInput } from "@/utils/date";
-import {
-  formatAbsoluteDateTime,
-  formatRelativeAge,
-  formatRelativeDue,
-} from "@/utils/timeMeta";
+import { formatAbsoluteDateTime, formatRelativeAge, formatRelativeDue } from "@/utils/timeMeta";
 import { statusActionLabel, useStatusActions } from "@/utils/statusActions";
 
 const props = defineProps<{
@@ -68,9 +64,7 @@ const editingReminderAt = ref("");
 const showAddReminder = ref(false);
 
 const isDeleted = computed(() => Boolean(props.detail?.deletedAt));
-const statusRef = computed(() =>
-  props.detail && !isDeleted.value ? props.detail.status : null,
-);
+const statusRef = computed(() => (props.detail && !isDeleted.value ? props.detail.status : null));
 const { actions } = useStatusActions(statusRef);
 
 const priorityOptions = computed(() =>
@@ -142,7 +136,9 @@ const timeLines = computed(() => {
     lines.push({
       key: "due",
       label: t("inspector.dueDate"),
-      value: formatRelativeDue(detail.dueDate, detail.status, t) ?? formatAbsoluteDateTime(detail.dueDate),
+      value:
+        formatRelativeDue(detail.dueDate, detail.status, t) ??
+        formatAbsoluteDateTime(detail.dueDate),
     });
   }
   if (detail.completedAt) {
@@ -220,7 +216,9 @@ function onSnooze(reminderId: string, value: string) {
   <aside v-if="detail" class="inspector" :aria-label="$t('inspector.aria')">
     <header class="inspector-header">
       <div class="header-left">
-        <span class="status-pill" :data-status="detail.status">{{ $t(`status.${detail.status}`) }}</span>
+        <span class="status-pill" :data-status="detail.status">{{
+          $t(`status.${detail.status}`)
+        }}</span>
         <span
           v-if="autosaveLabel"
           class="save-hint"
@@ -273,7 +271,9 @@ function onSnooze(reminderId: string, value: string) {
           >
             {{ statusActionLabel(detail!.status, action.target, t) }}
           </AppButton>
-          <AppButton variant="danger" @click="emit('remove')">{{ $t("inspector.remove") }}</AppButton>
+          <AppButton variant="danger" @click="emit('remove')">{{
+            $t("inspector.remove")
+          }}</AppButton>
         </div>
 
         <label class="app-field">
@@ -414,7 +414,9 @@ function onSnooze(reminderId: string, value: string) {
             <AppDateTimePicker v-model="reminderInput" :clearable="false" />
             <AppSelect v-model="repeatType" :options="repeatOptions" />
             <div class="reminder-actions">
-              <AppButton variant="primary" @click="submitReminder">{{ $t("common.add") }}</AppButton>
+              <AppButton variant="primary" @click="submitReminder">{{
+                $t("common.add")
+              }}</AppButton>
               <AppButton variant="ghost" @click="showAddReminder = false">
                 {{ $t("common.cancel") }}
               </AppButton>

@@ -186,11 +186,7 @@ defineExpose({ resetSubmitting, setError });
 
     <label class="app-field">
       <span>{{ $t("create.dueDate") }}</span>
-      <AppDateTimePicker
-        v-model="form.dueDate"
-        :compact="compact"
-        :teleport="teleport !== false"
-      />
+      <AppDateTimePicker v-model="form.dueDate" :compact="compact" :teleport="teleport !== false" />
     </label>
 
     <label class="app-field">
@@ -199,7 +195,9 @@ defineExpose({ resetSubmitting, setError });
     </label>
 
     <div class="app-modal-actions">
-      <AppButton variant="ghost" :disabled="submitting" @click="requestClose">{{ $t("common.cancel") }}</AppButton>
+      <AppButton variant="ghost" :disabled="submitting" @click="requestClose">{{
+        $t("common.cancel")
+      }}</AppButton>
       <AppButton variant="primary" :disabled="submitting" @click="handleSubmit">
         {{ submitting ? $t("common.creating") : $t("common.create") }}
       </AppButton>

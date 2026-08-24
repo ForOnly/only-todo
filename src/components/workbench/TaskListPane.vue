@@ -145,7 +145,9 @@ const isRefreshing = computed(() => props.loading && props.todos.length > 0);
 const showPagination = computed(() => props.total > props.pageSize);
 
 function canToggle(todo: TodoDto): boolean {
-  return !todo.deletedAt && (todo.status === "Todo" || todo.status === "Doing" || todo.status === "Done");
+  return (
+    !todo.deletedAt && (todo.status === "Todo" || todo.status === "Doing" || todo.status === "Done")
+  );
 }
 
 function onRowClick(todo: TodoDto) {
@@ -278,7 +280,9 @@ function submitQuickAdd() {
               <div class="title-meta-row">
                 <div class="title-row">
                   <span class="title">{{ todo.title }}</span>
-                  <span v-if="todo.status === 'Doing'" class="doing-mark">{{ $t("views.doing") }}</span>
+                  <span v-if="todo.status === 'Doing'" class="doing-mark">{{
+                    $t("views.doing")
+                  }}</span>
                 </div>
                 <div class="meta-right">
                   <span
@@ -290,11 +294,7 @@ function submitQuickAdd() {
                 </div>
               </div>
               <div v-if="todo.tags.length" class="tag-row">
-                <AppTagChip
-                  v-for="tag in visibleTags(todo)"
-                  :key="tag"
-                  :label="tag"
-                />
+                <AppTagChip v-for="tag in visibleTags(todo)" :key="tag" :label="tag" />
                 <AppTagChip
                   v-if="extraTagCount(todo)"
                   :label="$t('list.moreTags', { n: extraTagCount(todo) })"
@@ -318,7 +318,9 @@ function submitQuickAdd() {
     </ul>
 
     <footer v-if="showPagination" class="pagination">
-      <AppButton :disabled="page <= 1" @click="emit('prevPage')">{{ $t("list.prevPage") }}</AppButton>
+      <AppButton :disabled="page <= 1" @click="emit('prevPage')">{{
+        $t("list.prevPage")
+      }}</AppButton>
       <span>{{ page }} / {{ Math.max(1, Math.ceil(total / pageSize)) }}</span>
       <AppButton :disabled="page * pageSize >= total" @click="emit('nextPage')">
         {{ $t("list.nextPage") }}

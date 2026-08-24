@@ -42,7 +42,6 @@ const emit = defineEmits<{
   confirm: [];
 }>();
 
-
 // ── 今日 ──
 const today = computed(() => {
   const d = new Date();
@@ -159,12 +158,7 @@ function onConfirm() {
       @update:minute="emit('update:minute', $event)"
       @update:second="emit('update:second', $event)"
     />
-    <ActionBar
-      :clearable="clearable"
-      @today="onToday"
-      @clear="onClear"
-      @confirm="onConfirm"
-    />
+    <ActionBar :clearable="clearable" @today="onToday" @clear="onClear" @confirm="onConfirm" />
   </div>
 </template>
 

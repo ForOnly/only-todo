@@ -11,6 +11,8 @@ use crate::domain::{
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
+type TodoWithNextTrigger = (Todo, Option<DateTime<Utc>>);
+
 pub struct TodoRepository;
 
 impl TodoRepository {
@@ -437,9 +439,7 @@ impl TodoRepository {
     }
 
     /// 活跃 Todo/Doing + 最近启用的下次提醒（按 updated_at 升序，供 stale 截取）
-    pub fn list_active_for_planner(
-        db: &Database,
-    ) -> Result<Vec<(Todo, Option<DateTime<Utc>>)>, AppError> {
+    pub fn list_active_for_planner(db: &Database) -> Result<Vec<TodoWithNextTrigger>, AppError> {
         db.with_conn(|conn| {
             let mut stmt = conn
                 .prepare(

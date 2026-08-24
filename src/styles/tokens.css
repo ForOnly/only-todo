@@ -73,11 +73,11 @@
     --color-success: #4ade80;
     --color-overlay: rgba(0, 0, 0, 0.55);
 
-  /* 标签 chip（列表/Inspector 元数据）*/
-  --color-tag-bg: rgba(148, 163, 184, 0.14);
-  --color-tag-border: rgba(148, 163, 184, 0.30);
-  --color-tag-text: var(--color-text-secondary);
-  --color-tag-prefix: var(--color-muted);
+    /* 标签 chip（列表/Inspector 元数据）*/
+    --color-tag-bg: rgba(148, 163, 184, 0.14);
+    --color-tag-border: rgba(148, 163, 184, 0.3);
+    --color-tag-text: var(--color-text-secondary);
+    --color-tag-prefix: var(--color-muted);
 
     --color-priority-urgent: #f87171;
     --color-priority-high: #fb923c;

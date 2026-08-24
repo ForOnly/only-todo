@@ -3,11 +3,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import type { EventDto } from "@/api/types";
-import {
-  eventsNewestFirst,
-  formatActivityLine,
-  formatActivitySummary,
-} from "@/utils/i18nFormat";
+import { eventsNewestFirst, formatActivityLine, formatActivitySummary } from "@/utils/i18nFormat";
 
 const props = defineProps<{
   events: EventDto[];
@@ -18,9 +14,7 @@ const collapsed = ref(true);
 
 const ordered = computed(() => eventsNewestFirst(props.events));
 const latest = computed(() => ordered.value[0] ?? null);
-const summary = computed(() =>
-  latest.value ? formatActivitySummary(latest.value, t) : "",
-);
+const summary = computed(() => (latest.value ? formatActivitySummary(latest.value, t) : ""));
 const lines = computed(() => ordered.value.map((event) => formatActivityLine(event, t)));
 </script>
 

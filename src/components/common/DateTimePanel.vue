@@ -125,7 +125,9 @@ onUnmounted(() => {
   color: var(--color-text);
   opacity: 0;
   transform: translateY(4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
   pointer-events: auto;
 }
 

@@ -39,9 +39,7 @@ const badge = computed(() => {
 
 const tooltip = computed(() => {
   const overdue =
-    props.overdueCount > 0
-      ? t("companion.ballOverdue", { n: props.overdueCount })
-      : "";
+    props.overdueCount > 0 ? t("companion.ballOverdue", { n: props.overdueCount }) : "";
   return t("companion.ballTitle", { active: props.activeCount, overdue });
 });
 

@@ -192,7 +192,8 @@ export default {
     enableNotifications: "Enable reminder notifications",
     list: "List",
     defaultView: "On open",
-    defaultViewHint: "Defaults to the Today focus board. A library view opens the library instead; saving does not switch the current page.",
+    defaultViewHint:
+      "Defaults to the Today focus board. A library view opens the library instead; saving does not switch the current page.",
     defaultSort: "Default sort",
     direction: "Order",
     asc: "Ascending",
@@ -204,9 +205,11 @@ export default {
     defaultShape: "Default shape",
     ball: "Ball",
     panel: "Panel",
-    shapeHint: "Ball is the bubble; − returns to ball. Panel is a mini window; − docks to edge. Docked − collapses to a strip.",
+    shapeHint:
+      "Ball is the bubble; − returns to ball. Panel is a mini window; − docks to edge. Docked − collapses to a strip.",
     hoverPreview: "Dock hover preview",
-    hoverHint: "Off by default. Hover ~0.4s to preview, leave ~0.3s to collapse; click preview to pin. Unsubmitted quick-add text keeps preview open on blur or pointer leave.",
+    hoverHint:
+      "Off by default. Hover ~0.4s to preview, leave ~0.3s to collapse; click preview to pin. Unsubmitted quick-add text keeps preview open on blur or pointer leave.",
     visibleCount: "Assistant list size",
     system: "System",
     autostart: "Launch at login",

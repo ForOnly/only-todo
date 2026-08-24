@@ -121,4 +121,3 @@ export function formatActivitySummary(
   }
   return t("activity.summaryNoTitle", { action: line.action, time: line.time });
 }
-
