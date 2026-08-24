@@ -6,6 +6,8 @@ export type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** 为 false 时仅显示确认按钮（用于提示框） */
+  showCancel?: boolean;
 };
 
 type ConfirmState = {
@@ -15,6 +17,7 @@ type ConfirmState = {
   confirmLabel: string;
   cancelLabel: string;
   danger: boolean;
+  showCancel: boolean;
 };
 
 const state = reactive<ConfirmState>({
@@ -24,6 +27,7 @@ const state = reactive<ConfirmState>({
   confirmLabel: "",
   cancelLabel: "",
   danger: false,
+  showCancel: true,
 });
 
 let resolver: ((value: boolean) => void) | null = null;
@@ -39,6 +43,7 @@ export function confirm(options: ConfirmOptions): Promise<boolean> {
   state.confirmLabel = options.confirmLabel ?? "";
   state.cancelLabel = options.cancelLabel ?? "";
   state.danger = options.danger ?? false;
+  state.showCancel = options.showCancel ?? true;
   state.open = true;
   return new Promise((resolve) => {
     resolver = resolve;

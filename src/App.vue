@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 
 import type {
@@ -21,6 +22,7 @@ import SettingsModal from "@/components/settings/SettingsModal.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
 import CreateTodoModal from "@/components/todo/CreateTodoModal.vue";
 import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
+import UpdateProgressModal from "@/components/common/UpdateProgressModal.vue";
 import TaskEditDrawer from "@/components/common/TaskEditDrawer.vue";
 import ViewSidebar from "@/components/workbench/ViewSidebar.vue";
 import TaskListPane from "@/components/workbench/TaskListPane.vue";
@@ -29,12 +31,15 @@ import ActivityStrip from "@/components/workbench/ActivityStrip.vue";
 import { TAURI_EVENTS } from "@/constants/events";
 import { coerceDefaultView, isLibraryView } from "@/constants/workbenchViews";
 import { modalEscDepth } from "@/composables/useModalEscStack";
+import { useAppUpdater } from "@/composables/useAppUpdater";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
 import { applyAppearance } from "@/utils/appearance";
 import { fromLocalDatetimeInput, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 import { parseListDefaultSort } from "@/utils/listSort";
+
+const { t } = useI18n();
 
 const {
   todos,
@@ -99,6 +104,12 @@ const {
   await loadTags();
   await loadRecentEvents();
 });
+
+const { updating, checking, progress, phase, statusMessage, indeterminate, runUpdateFlow } =
+  useAppUpdater({
+    t,
+    flushBeforeInstall: flushAutosave,
+  });
 
 const settingsOpen = ref(false);
 const settingsError = ref<string | null>(null);
@@ -223,6 +234,11 @@ onMounted(async () => {
   );
 
   window.addEventListener("keydown", onGlobalKeydown);
+
+  // 启动后延迟检测更新（仅主窗）
+  window.setTimeout(() => {
+    void runUpdateFlow(false);
+  }, 3000);
 });
 
 onUnmounted(() => {
@@ -645,8 +661,18 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       :ui-locale="uiLocale"
       :error="settingsError"
       :saving="settingsSaving"
+      :checking-update="checking"
       @close="settingsOpen = false"
       @update="handleSettingsUpdate"
+      @check-update="runUpdateFlow(true)"
+    />
+
+    <UpdateProgressModal
+      :open="updating"
+      :message="statusMessage"
+      :progress="progress"
+      :phase="phase"
+      :indeterminate="indeterminate"
     />
 
     <AppShellOverlays confirm />

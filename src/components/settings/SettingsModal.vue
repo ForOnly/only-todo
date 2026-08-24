@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { getVersion } from "@tauri-apps/api/app";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppModal from "@/components/common/AppModal.vue";
@@ -34,11 +35,13 @@ const props = defineProps<{
   /** 父组件保存失败时展示；成功时父组件关闭弹窗 */
   error?: string | null;
   saving?: boolean;
+  checkingUpdate?: boolean;
 }>();
 
 const emit = defineEmits<{
   close: [];
   update: [payload: UpdateSettingsDto];
+  "check-update": [];
 }>();
 
 const { t } = useI18n();
@@ -57,6 +60,7 @@ const localSortOrder = ref<SortOrder>("desc");
 const localDefaultView = ref<WorkbenchView>(coerceDefaultView(props.listDefaultView));
 const closing = ref(false);
 const baseline = ref("");
+const appVersion = ref("");
 
 type SettingsDraft = {
   notificationEnabled: boolean;
@@ -142,9 +146,22 @@ watch(
       localSortOrder.value = sort.sortOrder;
       closing.value = false;
       baseline.value = JSON.stringify(captureDraft());
+      void loadAppVersion();
     }
   },
 );
+
+async function loadAppVersion() {
+  try {
+    appVersion.value = await getVersion();
+  } catch {
+    appVersion.value = "";
+  }
+}
+
+function checkUpdate() {
+  emit("check-update");
+}
 
 function save() {
   emit("update", {
@@ -268,6 +285,16 @@ async function requestClose() {
         <input v-model="localAutostart" type="checkbox" />
         <span>{{ $t("settings.autostart") }}</span>
       </label>
+      <div class="setting-row about-row">
+        <span>{{ $t("settings.version") }}</span>
+        <span class="version-value">{{ appVersion || "—" }}</span>
+      </div>
+      <div class="setting-row">
+        <span>{{ $t("settings.updates") }}</span>
+        <AppButton variant="default" :disabled="checkingUpdate" @click="checkUpdate">
+          {{ checkingUpdate ? $t("updater.checking") : $t("settings.checkUpdate") }}
+        </AppButton>
+      </div>
     </section>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -337,5 +364,14 @@ async function requestClose() {
   border-radius: var(--radius-sm);
   color: var(--color-text);
   background: var(--color-surface);
+}
+
+.about-row {
+  cursor: default;
+}
+
+.version-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
 }
 </style>

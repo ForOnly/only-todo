@@ -47,7 +47,7 @@ mise run build         # 构建生产包（Tauri）
 
 ## 发布
 
-Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 GitHub Actions 上构建，产物上传到 **Draft** GitHub Release，人工检查后再 Publish。
+Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 GitHub Actions 上构建，产物上传到 **已发布** 的 GitHub Release（含 `latest.json` 供应用内更新）。
 
 ### 触发方式
 
@@ -57,23 +57,41 @@ Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release
 ### 发版前
 
 1. 合并到 `main`，确认 CI 通过
-2. 同步三处版本号：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`
-3. 提交后打 tag 并推送：
+2. 同步三处版本号：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`（三者必须相同）
+3. 打 tag：**必须**为 `v` + 上述版本号（如版本 `1.0.0` → tag `v1.0.0`）。CI 会校验 tag 与 `tauri.conf.json` 一致，不一致则构建失败
+4. 提交后推送 tag：
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
-4. Actions 完成后，在 GitHub Releases 打开 Draft → 检查安装包 → Publish
+5. Actions 完成后，在 GitHub Releases 检查安装包与 `latest.json`（Release 名称、产物版本、`latest.json` 中的 `version` 均应与 tag 一致）
 
 ### 仓库设置
 
 在 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**，否则创建 Release 可能失败。
 
-未签名安装包在 Windows 上可能触发 SmartScreen 提示；代码签名与自动更新留作后续扩展。
+在 **Settings → Secrets and variables → Actions** 配置 Tauri 更新签名（与 `tauri.conf.json` 中公钥配对）：
 
-CD 产物为 NSIS 安装包（`--bundles nsis`）；本地完整 Tauri 构建仍可用 `mise run build`（含 MSI 等，需 WiX）。
+| Secret | 说明 |
+|--------|------|
+| `TAURI_SIGNING_PRIVATE_KEY` | `tauri signer generate` 生成的私钥全文 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥密码（无密码可留空或不设） |
+
+本地生成示例（私钥勿提交仓库）：
+
+```bash
+npm run tauri signer generate -- -w "$HOME/.tauri/only-todo.key"
+```
+
+将 `.pub` 内容写入 `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`。
+
+未签名安装包在 Windows 上可能触发 SmartScreen 提示；Authenticode 代码签名可独立后续配置。
+
+**应用内更新**：首个带 updater 的版本（如 `0.2.0`）之前的用户需手动安装一次；之后可在设置页或启动时检测更新，确认后自动下载、安装并重启。
+
+CD 产物为 NSIS 安装包（`--bundles nsis`）及 updater 签名产物；本地完整 Tauri 构建仍可用 `mise run build`（含 MSI 等，需 WiX）。
 
 ### 约定
 

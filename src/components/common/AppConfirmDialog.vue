@@ -17,7 +17,9 @@ const cancelLabel = computed(() => state.cancelLabel || t("common.cancel"));
   <AppModal :open="state.open" :title="state.title" @close="resolveConfirm(false)">
     <p class="message">{{ state.message }}</p>
     <div class="app-modal-actions">
-      <AppButton variant="ghost" @click="resolveConfirm(false)">{{ cancelLabel }}</AppButton>
+      <AppButton v-if="state.showCancel" variant="ghost" @click="resolveConfirm(false)">
+        {{ cancelLabel }}
+      </AppButton>
       <AppButton :variant="state.danger ? 'danger' : 'primary'" @click="resolveConfirm(true)">
         {{ confirmLabel }}
       </AppButton>
