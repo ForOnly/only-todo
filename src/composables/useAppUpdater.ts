@@ -36,9 +36,7 @@ export function useAppUpdater(options: {
 
   let flowInFlight = false;
 
-  const showIndeterminate = computed(
-    () => indeterminate.value && phase.value === "downloading",
-  );
+  const showIndeterminate = computed(() => indeterminate.value && phase.value === "downloading");
 
   function isUpdaterEnabled(): boolean {
     return !import.meta.env.DEV;
