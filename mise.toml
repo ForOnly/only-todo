@@ -43,6 +43,25 @@ description = "从 Rust domain 导出 TypeScript 类型"
 run = "cargo run --bin export-ts"
 dir = "src-tauri"
 
+[tasks.gen-types-check]
+description = "检查 gen-types 与仓库无漂移"
+depends = ["gen-types"]
+run = "git diff --exit-code src/api/generated"
+
+[tasks.build-fe]
+description = "前端类型检查与生产构建"
+run = "npm run build"
+depends = ["install"]
+
+[tasks.test]
+description = "Rust 单元测试"
+run = "cargo test"
+dir = "src-tauri"
+
+[tasks.ci]
+description = "本地复现 CI（format/lint/构建/rust/test/gen-types）"
+depends = ["format-check", "lint", "build-fe", "check", "clippy", "test", "gen-types-check"]
+
 [tasks.clean]
 description = "清理 Rust 编译产物"
 run = "cargo clean"

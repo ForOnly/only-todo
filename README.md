@@ -32,14 +32,48 @@ mise run install
 
 ```bash
 mise run dev           # 开发
+mise run ci            # 本地复现 GitHub CI
 mise run check         # Rust 编译检查
 mise run clippy        # Rust clippy
+mise run test          # Rust 单元测试
 mise run lint          # ESLint
+mise run build-fe      # 前端类型检查 + Vite 生产构建
 mise run gen-types     # 从 Rust 导出 TS 类型
+mise run gen-types-check  # 导出后检查 generated 无漂移
 mise run format        # Prettier 格式化前端
 mise run format-check  # Prettier 检查前端格式
-mise run build         # 构建生产包
+mise run build         # 构建生产包（Tauri）
 ```
+
+## 发布
+
+Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 GitHub Actions 上构建，产物上传到 **Draft** GitHub Release，人工检查后再 Publish。
+
+### 触发方式
+
+- **自动**：推送 `v*` tag（如 `v0.2.0`）
+- **手动**：GitHub → Actions → Release → Run workflow
+
+### 发版前
+
+1. 合并到 `main`，确认 CI 通过
+2. 同步三处版本号：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`
+3. 提交后打 tag 并推送：
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+4. Actions 完成后，在 GitHub Releases 打开 Draft → 检查安装包 → Publish
+
+### 仓库设置
+
+在 **Settings → Actions → General → Workflow permissions** 勾选 **Read and write permissions**，否则创建 Release 可能失败。
+
+未签名安装包在 Windows 上可能触发 SmartScreen 提示；代码签名与自动更新留作后续扩展。
+
+CD 产物为 NSIS 安装包（`--bundles nsis`）；本地完整 Tauri 构建仍可用 `mise run build`（含 MSI 等，需 WiX）。
 
 ### 约定
 
