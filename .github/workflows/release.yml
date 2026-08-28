@@ -50,8 +50,33 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            Write-Host "::error::TAURI_SIGNING_PRIVATE_KEY is required for signed updater artifacts"
+            Write-Host "::error::TAURI_SIGNING_PRIVATE_KEY is required for signed updater artifacts. Paste the full private key (including the untrusted comment line) from the same tauri signer generate run as plugins.updater.pubkey."
             exit 1
+          }
+
+      # 在完整构建前校验私钥/密码可用，避免编 8 分钟后才因签名失败
+      - name: Dry-run updater signing key
+        shell: pwsh
+        env:
+          CI: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $tmp = Join-Path $env:RUNNER_TEMP "only-todo-signer-dry-run.bin"
+          $sig = "$tmp.sig"
+          Set-Content -Path $tmp -Value "only-todo signer dry-run" -NoNewline
+          try {
+            npm run tauri -- signer sign $tmp
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::Updater signing dry-run failed. Check TAURI_SIGNING_PRIVATE_KEY (full key text including untrusted comment) and TAURI_SIGNING_PRIVATE_KEY_PASSWORD match the key pair used for plugins.updater.pubkey in tauri.conf.json."
+              exit 1
+            }
+            if (-not (Test-Path $sig)) {
+              Write-Host "::error::Updater signing dry-run produced no .sig file"
+              exit 1
+            }
+          } finally {
+            Remove-Item -Force -ErrorAction SilentlyContinue $tmp, $sig
           }
 
       - uses: tauri-apps/tauri-action@v0.6.2

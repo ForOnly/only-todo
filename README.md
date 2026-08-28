@@ -76,8 +76,8 @@ git push origin v1.0.0
 
 | Secret | 说明 |
 |--------|------|
-| `TAURI_SIGNING_PRIVATE_KEY` | `tauri signer generate` 生成的私钥全文 |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥密码（无密码可留空或不设） |
+| `TAURI_SIGNING_PRIVATE_KEY` | **同一次** `tauri signer generate` 产出的私钥**全文**（须含 `untrusted comment` 行；勿加引号、勿只贴 Base64 中间段） |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 生成密钥时设置的密码（无密码则留空或不设；有密码必须与生成时一致） |
 
 本地生成示例（私钥勿提交仓库）：
 
@@ -85,7 +85,17 @@ git push origin v1.0.0
 npm run tauri signer generate -- -w "$HOME/.tauri/only-todo.key"
 ```
 
-将 `.pub` 内容写入 `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`。
+将**同一次**生成的 `.pub` 内容写入 `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`。私钥与公钥必须成对；换密钥时两边一起更新，否则 CI 签名或客户端校验会失败。
+
+发版前可本地试签（确认 Secret 内容与密码正确）：
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $HOME\.tauri\only-todo.key -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<生成时的密码，无则空>"
+npm run tauri -- signer sign .\some-temp-file.bin
+```
+
+`release.yml` 在完整构建前会对临时文件做同样的 dry-run；失败时不会进入 8 分钟级 `tauri-action` 编译。
 
 未签名安装包在 Windows 上可能触发 SmartScreen 提示；Authenticode 代码签名可独立后续配置。
 
