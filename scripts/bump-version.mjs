@@ -131,9 +131,15 @@ function gitPorcelain() {
 
 /** 从 `git status --porcelain` 一行解析路径（兼容重命名）。 */
 function porcelainPath(line) {
-  const m = line.match(/^.. (.*)$/);
-  if (!m) return null;
-  let path = m[1];
+  // 标准：2 字符 XY + 空格 + path；偶发「X + 空格 + path」也兼容
+  let path;
+  if (line.length >= 4 && line[2] === " ") {
+    path = line.slice(3);
+  } else if (line.length >= 3 && line[1] === " ") {
+    path = line.slice(2);
+  } else {
+    return null;
+  }
   if (path.startsWith('"') && path.endsWith('"')) {
     try {
       path = JSON.parse(path);
