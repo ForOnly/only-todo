@@ -60,9 +60,7 @@ function main() {
   }
 
   writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  console.log(
-    `Wrote ${output} (${entries.length} platforms) with proxy prefix ${prefix}`,
-  );
+  console.log(`Wrote ${output} (${entries.length} platforms) with proxy prefix ${prefix}`);
 }
 
 main();
