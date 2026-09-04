@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
+import { getTodo } from "@/api/todos";
 import type { TodoDto } from "@/api/types";
 
 const props = defineProps<{
@@ -12,7 +14,33 @@ defineEmits<{
   openMain: [];
 }>();
 
-const descriptionText = computed(() => props.detail.description?.trim() ?? "");
+const { t } = useI18n();
+
+/** 列表 DTO 不含 description；展开时按需拉取 */
+const description = ref(props.detail.description ?? "");
+const descLoading = ref(false);
+
+watch(
+  () => props.detail.id,
+  async (id) => {
+    description.value = props.detail.description ?? "";
+    if (description.value.trim()) return;
+    descLoading.value = true;
+    try {
+      const full = await getTodo(id);
+      if (props.detail.id === id) {
+        description.value = full.description ?? "";
+      }
+    } catch {
+      // ignore
+    } finally {
+      if (props.detail.id === id) descLoading.value = false;
+    }
+  },
+  { immediate: true },
+);
+
+const descriptionText = computed(() => description.value.trim());
 </script>
 
 <template>
@@ -29,7 +57,8 @@ const descriptionText = computed(() => props.detail.description?.trim() ?? "");
         ×
       </button>
     </div>
-    <p v-if="descriptionText" class="peek-desc">{{ descriptionText }}</p>
+    <p v-if="descLoading" class="peek-desc empty">{{ t("common.loading") }}</p>
+    <p v-else-if="descriptionText" class="peek-desc">{{ descriptionText }}</p>
     <p v-else class="peek-desc empty">{{ $t("companion.noDescription") }}</p>
   </section>
 </template>

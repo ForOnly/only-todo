@@ -1,15 +1,15 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 
 use crate::domain::{
     priority::Priority,
     status::{StatusActionDto, TodoStatus},
     todo::{
-        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTimePlannerQuery, ListTodoQuery,
-        ListWorkbenchQuery, PaginatedResponse, TimePlannerDto, TodoDto, TodoPlannerPreviewDto,
-        UpdateTodoDto, WorkbenchView,
+        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTodoQuery, ListWorkbenchQuery,
+        PaginatedResponse, TodoDto, UpdateTodoDto, WorkbenchView,
     },
 };
 use crate::errors::AppError;
+use crate::events::WorkbenchMetaDto;
 use crate::infrastructure::database::Database;
 use crate::repository::event_repository::EventRepository;
 use crate::repository::reminder_repository::ReminderRepository;
@@ -231,6 +231,7 @@ impl TodoService {
     }
 
     /// 焦点台：逾期 / 进行中（未逾期）/ 今日到期（仅 Todo），三组互斥。
+    /// 单次持锁、三次 SELECT（无 COUNT）。
     pub fn list_focus_board(
         db: &Database,
         query: ListFocusBoardQuery,
@@ -249,103 +250,63 @@ impl TodoService {
             query.sort_order
         };
 
-        let overdue = Self::list(
-            db,
-            ListTodoQuery {
-                status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
-                due_date_before: Some(start.to_rfc3339()),
-                sort_by: sort_by.clone(),
-                sort_order: sort_order.clone(),
-                page: 1,
-                page_size: TODAY_FETCH_LIMIT,
-                ..Default::default()
-            },
-        )?;
+        let overdue_q = ListTodoQuery {
+            status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
+            due_date_before: Some(start.to_rfc3339()),
+            sort_by: sort_by.clone(),
+            sort_order: sort_order.clone(),
+            page: 1,
+            page_size: TODAY_FETCH_LIMIT,
+            ..Default::default()
+        };
+        let doing_q = ListTodoQuery {
+            status: Some(vec![TodoStatus::Doing]),
+            sort_by: sort_by.clone(),
+            sort_order: sort_order.clone(),
+            page: 1,
+            page_size: TODAY_FETCH_LIMIT,
+            ..Default::default()
+        };
+        let due_today_q = ListTodoQuery {
+            status: Some(vec![TodoStatus::Todo]),
+            due_date_after: Some(start.to_rfc3339()),
+            due_date_before: Some(end.to_rfc3339()),
+            sort_by,
+            sort_order,
+            page: 1,
+            page_size: TODAY_FETCH_LIMIT,
+            ..Default::default()
+        };
 
-        let doing_all = Self::list(
-            db,
-            ListTodoQuery {
-                status: Some(vec![TodoStatus::Doing]),
-                sort_by: sort_by.clone(),
-                sort_order: sort_order.clone(),
-                page: 1,
-                page_size: TODAY_FETCH_LIMIT,
-                ..Default::default()
-            },
-        )?;
+        db.with_conn(|conn| {
+            let overdue_items = TodoRepository::list_items_on(conn, &overdue_q)?;
+            let doing_all = TodoRepository::list_items_on(conn, &doing_q)?;
+            let due_today_items = TodoRepository::list_items_on(conn, &due_today_q)?;
 
-        let due_today = Self::list(
-            db,
-            ListTodoQuery {
-                status: Some(vec![TodoStatus::Todo]),
-                due_date_after: Some(start.to_rfc3339()),
-                due_date_before: Some(end.to_rfc3339()),
-                sort_by,
-                sort_order,
-                page: 1,
-                page_size: TODAY_FETCH_LIMIT,
-                ..Default::default()
-            },
-        )?;
+            let overdue_ids: std::collections::HashSet<String> =
+                overdue_items.iter().map(|todo| todo.id.clone()).collect();
+            let doing = doing_all
+                .into_iter()
+                .filter(|todo| !overdue_ids.contains(&todo.id))
+                .map(TodoDto::from)
+                .collect();
 
-        let overdue_ids: std::collections::HashSet<String> =
-            overdue.items.iter().map(|todo| todo.id.clone()).collect();
-        let doing = doing_all
-            .items
-            .into_iter()
-            .filter(|todo| !overdue_ids.contains(&todo.id))
-            .collect();
-
-        Ok(FocusBoardDto {
-            overdue: overdue.items,
-            doing,
-            due_today: due_today.items,
+            Ok(FocusBoardDto {
+                overdue: overdue_items.into_iter().map(TodoDto::from).collect(),
+                doing,
+                due_today: due_today_items.into_iter().map(TodoDto::from).collect(),
+            })
         })
     }
 
-    /// 时间规划面板：接下来 / 逾期 / 最久未动
-    pub fn list_time_planner(
-        db: &Database,
-        query: ListTimePlannerQuery,
-    ) -> Result<TimePlannerDto, AppError> {
-        let now = Utc::now();
-        let start_of_today = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let range_end = now + Duration::days(query.range_days.max(1) as i64);
-        let top_n = query.top_n.clamp(1, 20) as usize;
-
-        let rows = TodoRepository::list_active_for_planner(db)?;
-        let mut overdue = Vec::new();
-        let mut next = Vec::new();
-        let mut stale = Vec::new();
-
-        for (todo, next_trigger) in rows {
-            let preview = planner_preview_from(&todo, next_trigger);
-
-            if let Some(due) = todo.due_date {
-                if due < start_of_today {
-                    overdue.push(preview.clone());
-                }
-            }
-
-            if let Some(plan_at) = compute_plan_at(todo.due_date, next_trigger, now) {
-                if plan_at <= range_end {
-                    let mut item = preview.clone();
-                    item.plan_at = Some(plan_at.to_rfc3339());
-                    next.push(item);
-                }
-            }
-
-            stale.push(preview);
-        }
-
-        overdue.sort_by(|a, b| a.due_date.cmp(&b.due_date));
-        next.sort_by(|a, b| a.plan_at.cmp(&b.plan_at));
-        stale.truncate(top_n);
-
-        Ok(TimePlannerDto {
-            next,
-            overdue,
-            stale,
+    /// 主窗侧栏元数据：标签 + 最近活动，一次 IPC、单次持锁。
+    pub fn workbench_meta(db: &Database, event_limit: u32) -> Result<WorkbenchMetaDto, AppError> {
+        let limit = event_limit.clamp(1, 50);
+        db.with_conn(|conn| {
+            let tags = TodoRepository::list_all_tags_on(conn)?;
+            // 与 list_events 无游标一致：最新 N 条再按时间正序；活动条前端再降序
+            let events = EventRepository::list_since_on(conn, None, limit)?;
+            Ok(WorkbenchMetaDto { tags, events })
         })
     }
 
@@ -425,43 +386,6 @@ fn normalize_page(page: &mut u32, page_size: &mut u32) -> Result<(), AppError> {
     Ok(())
 }
 
-fn planner_preview_from(
-    todo: &crate::domain::todo::Todo,
-    next_trigger: Option<DateTime<Utc>>,
-) -> TodoPlannerPreviewDto {
-    TodoPlannerPreviewDto {
-        id: todo.id.clone(),
-        title: todo.title.clone(),
-        status: todo.status,
-        priority: todo.priority,
-        due_date: todo.due_date.map(|value| value.to_rfc3339()),
-        created_at: todo.created_at.to_rfc3339(),
-        updated_at: todo.updated_at.to_rfc3339(),
-        tags: todo.tags.clone(),
-        next_trigger_at: next_trigger.map(|value| value.to_rfc3339()),
-        plan_at: None,
-    }
-}
-
-fn compute_plan_at(
-    due: Option<DateTime<Utc>>,
-    next_trigger: Option<DateTime<Utc>>,
-    now: DateTime<Utc>,
-) -> Option<DateTime<Utc>> {
-    let mut candidates = Vec::new();
-    if let Some(due_at) = due {
-        if due_at >= now {
-            candidates.push(due_at);
-        }
-    }
-    if let Some(trigger_at) = next_trigger {
-        if trigger_at >= now {
-            candidates.push(trigger_at);
-        }
-    }
-    candidates.into_iter().min()
-}
-
 fn validate_title(title: &str) -> Result<(), AppError> {
     let trimmed = title.trim();
     if trimmed.is_empty() || trimmed.len() > MAX_TITLE_LEN {
@@ -514,5 +438,190 @@ impl Default for ListTodoQuery {
             page: 1,
             page_size: 50,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::todo::CreateTodoDto;
+
+    fn db() -> Database {
+        Database::open_in_memory().expect("open in-memory db")
+    }
+
+    fn create_titled(db: &Database, title: &str) -> TodoDto {
+        TodoService::create(
+            db,
+            CreateTodoDto {
+                title: title.into(),
+                description: None,
+                priority: None,
+                due_date: None,
+                tags: None,
+            },
+        )
+        .expect("create todo")
+    }
+
+    #[test]
+    fn transition_todo_to_doing_and_done() {
+        let db = db();
+        let todo = create_titled(&db, "t1");
+        assert_eq!(todo.status, TodoStatus::Todo);
+
+        let doing = TodoService::transition(&db, &todo.id, TodoStatus::Doing).unwrap();
+        assert_eq!(doing.status, TodoStatus::Doing);
+
+        let done = TodoService::transition(&db, &todo.id, TodoStatus::Done).unwrap();
+        assert_eq!(done.status, TodoStatus::Done);
+        assert!(done.completed_at.is_some());
+    }
+
+    #[test]
+    fn transition_rejects_illegal_edge() {
+        let db = db();
+        let todo = create_titled(&db, "t2");
+        TodoService::transition(&db, &todo.id, TodoStatus::Done).unwrap();
+        let err = TodoService::transition(&db, &todo.id, TodoStatus::Doing).unwrap_err();
+        match err {
+            AppError::InvalidTransition { .. } => {}
+            other => panic!("expected InvalidTransition, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn soft_delete_and_restore() {
+        let db = db();
+        let todo = create_titled(&db, "t3");
+        TodoService::delete(&db, &todo.id).unwrap();
+        let listed = TodoService::list(
+            &db,
+            ListTodoQuery {
+                status: Some(vec![TodoStatus::Todo]),
+                page: 1,
+                page_size: 50,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(listed.items.iter().all(|t| t.id != todo.id));
+
+        let restored = TodoService::restore(&db, &todo.id).unwrap();
+        assert!(restored.deleted_at.is_none());
+        assert_eq!(restored.title, "t3");
+    }
+
+    #[test]
+    fn focus_board_partitions_overdue_doing_due_today() {
+        let db = db();
+        let now = Utc::now();
+        let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let yesterday = (start - Duration::days(1)).to_rfc3339();
+        let today_noon = (start + Duration::hours(12)).to_rfc3339();
+
+        let overdue = TodoService::create(
+            &db,
+            CreateTodoDto {
+                title: "overdue".into(),
+                description: None,
+                priority: None,
+                due_date: Some(yesterday),
+                tags: None,
+            },
+        )
+        .unwrap();
+        TodoService::transition(&db, &overdue.id, TodoStatus::Doing).unwrap();
+
+        let doing = TodoService::create(
+            &db,
+            CreateTodoDto {
+                title: "doing".into(),
+                description: None,
+                priority: None,
+                due_date: None,
+                tags: None,
+            },
+        )
+        .unwrap();
+        TodoService::transition(&db, &doing.id, TodoStatus::Doing).unwrap();
+
+        let due_today = TodoService::create(
+            &db,
+            CreateTodoDto {
+                title: "due-today".into(),
+                description: None,
+                priority: None,
+                due_date: Some(today_noon),
+                tags: None,
+            },
+        )
+        .unwrap();
+
+        let board = TodoService::list_focus_board(
+            &db,
+            ListFocusBoardQuery {
+                sort_by: "priority".into(),
+                sort_order: "desc".into(),
+            },
+        )
+        .unwrap();
+
+        assert!(board.overdue.iter().any(|t| t.id == overdue.id));
+        assert!(board.doing.iter().any(|t| t.id == doing.id));
+        assert!(!board.doing.iter().any(|t| t.id == overdue.id));
+        assert!(board.due_today.iter().any(|t| t.id == due_today.id));
+    }
+
+    #[test]
+    fn list_omits_description_payload() {
+        let db = db();
+        let todo = TodoService::create(
+            &db,
+            CreateTodoDto {
+                title: "with-desc".into(),
+                description: Some("secret body".into()),
+                priority: None,
+                due_date: None,
+                tags: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(todo.description, "secret body");
+
+        let listed = TodoService::list(
+            &db,
+            ListTodoQuery {
+                page: 1,
+                page_size: 50,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let row = listed.items.iter().find(|t| t.id == todo.id).unwrap();
+        assert_eq!(row.description, "");
+
+        let full = TodoService::get(&db, &todo.id).unwrap();
+        assert_eq!(full.description, "secret body");
+    }
+
+    #[test]
+    fn workbench_meta_returns_tags() {
+        let db = db();
+        TodoService::create(
+            &db,
+            CreateTodoDto {
+                title: "tagged".into(),
+                description: None,
+                priority: None,
+                due_date: None,
+                tags: Some(vec!["alpha".into(), "beta".into()]),
+            },
+        )
+        .unwrap();
+        let meta = TodoService::workbench_meta(&db, 8).unwrap();
+        assert!(meta.tags.iter().any(|t| t == "alpha"));
+        assert!(meta.tags.iter().any(|t| t == "beta"));
+        assert!(meta.events.is_empty() || meta.events.len() <= 8);
     }
 }

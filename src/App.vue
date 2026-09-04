@@ -14,7 +14,7 @@ import type {
   UiTheme,
   WorkbenchView,
 } from "@/api/types";
-import { listAllTags, getTodo, transitionTodo } from "@/api/todos";
+import { listAllTags, getTodo, getWorkbenchMeta, transitionTodo } from "@/api/todos";
 import { listEvents } from "@/api/events";
 import { getSettings, updateSettings } from "@/api/settings";
 import type { EventDto } from "@/api/types";
@@ -100,9 +100,7 @@ const {
   remove,
   restore,
 } = useTodoDetail(editingId, async () => {
-  await fetchTodos();
-  await loadTags();
-  await loadRecentEvents();
+  await Promise.all([fetchTodos(), loadWorkbenchMeta()]);
 });
 
 const { updating, checking, progress, phase, statusMessage, indeterminate, runUpdateFlow } =
@@ -181,9 +179,7 @@ onMounted(async () => {
   await loadAndApplySettings();
   applyColdStartView();
 
-  await fetchTodos();
-  await loadTags();
-  await loadRecentEvents();
+  await Promise.all([fetchTodos(), loadWorkbenchMeta()]);
 
   eventUnlisteners.push(
     await listen<string>(TAURI_EVENTS.NAVIGATE_TO_TODO, (event) => {
@@ -218,9 +214,8 @@ onMounted(async () => {
       todosChangedTimer = setTimeout(() => {
         todosChangedTimer = null;
         void (async () => {
-          await fetchTodos();
-          await loadTags();
-          await loadRecentEvents();
+          // 列表与侧栏元数据并行；meta 合并为一次 IPC
+          await Promise.all([fetchTodos(), loadWorkbenchMeta()]);
           if (!editingId.value || saving.value) return;
           if (isDirty()) {
             await flushAutosave();
@@ -247,6 +242,17 @@ onUnmounted(() => {
     unlisten();
   }
 });
+
+async function loadWorkbenchMeta() {
+  try {
+    const meta = await getWorkbenchMeta(8);
+    allTags.value = meta.tags;
+    recentEvents.value = meta.events;
+  } catch {
+    // 回退拆分调用，避免单点失败整侧栏空白
+    await Promise.all([loadTags(), loadRecentEvents()]);
+  }
+}
 
 async function loadRecentEvents() {
   try {

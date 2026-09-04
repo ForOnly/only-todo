@@ -31,6 +31,15 @@ pub struct ListEventsQuery {
     pub limit: u32,
 }
 
+/// 主窗列表刷新附属数据（标签 + 最近活动）
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, rename_all = "camelCase")]
+pub struct WorkbenchMetaDto {
+    pub tags: Vec<String>,
+    pub events: Vec<EventDto>,
+}
+
 fn default_limit() -> u32 {
     50
 }

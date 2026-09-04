@@ -4,15 +4,14 @@ import type {
   CreateTodoDto,
   FocusBoardDto,
   ListFocusBoardQuery,
-  ListTimePlannerQuery,
   ListTodoQuery,
   ListWorkbenchQuery,
   PaginatedTodos,
   StatusActionDto,
-  TimePlannerDto,
   TodoDto,
   TodoStatus,
   UpdateTodoDto,
+  WorkbenchMetaDto,
   WorkbenchView,
 } from "@/api/types";
 
@@ -79,16 +78,9 @@ export async function listFocusBoard(
   });
 }
 
-/** Tauri Command: list_time_planner */
-export async function listTimePlanner(
-  query: Partial<ListTimePlannerQuery> = {},
-): Promise<TimePlannerDto> {
-  return invoke("list_time_planner", {
-    query: {
-      rangeDays: query.rangeDays ?? 7,
-      topN: query.topN ?? 5,
-    },
-  });
+/** Tauri Command: get_workbench_meta（标签 + 最近活动，一次 IPC） */
+export async function getWorkbenchMeta(eventLimit = 8): Promise<WorkbenchMetaDto> {
+  return invoke("get_workbench_meta", { eventLimit });
 }
 
 /** Tauri Command: transition_todo */

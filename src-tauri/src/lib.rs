@@ -22,8 +22,8 @@ use commands::{
     },
     settings::{get_appearance, get_settings, update_settings},
     todo::{
-        create_todo, delete_todo, get_allowed_transitions, get_todo, list_all_tags,
-        list_focus_board, list_time_planner, list_todos, list_workbench_todos, restore_todo,
+        create_todo, delete_todo, get_allowed_transitions, get_todo, get_workbench_meta,
+        list_all_tags, list_focus_board, list_todos, list_workbench_todos, restore_todo,
         transition_todo, update_todo,
     },
     window::{
@@ -74,13 +74,20 @@ pub fn run() {
             let db = Database::new(app.handle())?;
             // 尽早 manage，缩短 WebView 在 AppState 就绪前 invoke 的竞态窗口
             app.manage(AppState { db });
-            // 幂等：JSON tags → tags / todo_tags（失败则阻止启动，避免筛选与展示不一致）
-            TodoRepository::backfill_normalized_tags(&app.state::<AppState>().db).map_err(
-                |error| {
-                    tracing::error!("tag normalize backfill failed: {error}");
-                    error
-                },
-            )?;
+            // 幂等：JSON tags → tags / todo_tags；完成后写门闩，避免每次冷启动全表扫描
+            {
+                let state = app.state::<AppState>();
+                let already = SettingsRepository::get_value(&state.db, "internal.tags_normalized")?
+                    .as_deref()
+                    == Some("1");
+                if !already {
+                    TodoRepository::backfill_normalized_tags(&state.db).map_err(|error| {
+                        tracing::error!("tag normalize backfill failed: {error}");
+                        error
+                    })?;
+                    SettingsRepository::set_value(&state.db, "internal.tags_normalized", "1")?;
+                }
+            }
             app.manage(PendingNavigation(Mutex::new(None)));
             app.manage(FloatHost::new());
 
@@ -114,7 +121,7 @@ pub fn run() {
             list_todos,
             list_workbench_todos,
             list_focus_board,
-            list_time_planner,
+            get_workbench_meta,
             list_all_tags,
             get_allowed_transitions,
             transition_todo,

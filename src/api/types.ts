@@ -17,7 +17,6 @@ export type {
   FocusBoardDto,
   HomeShape,
   ListFocusBoardQuery,
-  ListTimePlannerQuery,
   PaginatedTodos,
   PanelMode,
   Priority,
@@ -25,12 +24,11 @@ export type {
   RepeatType,
   SettingsDto,
   StatusActionDto,
-  TimePlannerDto,
   TodoDto,
-  TodoPlannerPreviewDto,
   TodoStatus,
   UiLocale,
   UiTheme,
+  WorkbenchMetaDto,
   WorkbenchView,
 } from "./generated";
 

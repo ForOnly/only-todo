@@ -11,8 +11,6 @@ use crate::domain::{
 use crate::errors::AppError;
 use crate::infrastructure::database::Database;
 
-type TodoWithNextTrigger = (Todo, Option<DateTime<Utc>>);
-
 pub struct TodoRepository;
 
 impl TodoRepository {
@@ -264,30 +262,32 @@ impl TodoRepository {
     }
 
     pub fn list_all_tags(db: &Database) -> Result<Vec<String>, AppError> {
-        db.with_conn(|conn| {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT DISTINCT t.name FROM tags t
-                     INNER JOIN todo_tags tt ON tt.tag_name = t.name
-                     INNER JOIN todos todo ON todo.id = tt.todo_id AND todo.deleted_at IS NULL
-                     ORDER BY t.name COLLATE NOCASE",
-                )
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            let rows = stmt
-                .query_map([], |row| row.get::<_, String>(0))
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            let mut tags = Vec::new();
-            for row in rows {
-                tags.push(row.map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?);
-            }
-            Ok(tags)
-        })
+        db.with_conn(Self::list_all_tags_on)
+    }
+
+    pub(crate) fn list_all_tags_on(conn: &Connection) -> Result<Vec<String>, AppError> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT t.name FROM tags t
+                 INNER JOIN todo_tags tt ON tt.tag_name = t.name
+                 INNER JOIN todos todo ON todo.id = tt.todo_id AND todo.deleted_at IS NULL
+                 ORDER BY t.name COLLATE NOCASE",
+            )
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+        let mut tags = Vec::new();
+        for row in rows {
+            tags.push(row.map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?);
+        }
+        Ok(tags)
     }
 
     /// 将 todos.tags JSON 回填到规范化表（幂等）。
@@ -323,112 +323,8 @@ impl TodoRepository {
     }
 
     pub fn list(db: &Database, query: &ListTodoQuery) -> Result<PaginatedResponse<Todo>, AppError> {
-        let mut conditions: Vec<String> = Vec::new();
-        let mut bind_values: Vec<String> = Vec::new();
-
-        if query.include_deleted.unwrap_or(false) {
-            conditions.push("deleted_at IS NOT NULL".to_string());
-        } else {
-            conditions.push("deleted_at IS NULL".to_string());
-        }
-
-        if let Some(statuses) = &query.status {
-            if !statuses.is_empty() {
-                let placeholders: Vec<String> = statuses.iter().map(|_| "?".to_string()).collect();
-                conditions.push(format!("status IN ({})", placeholders.join(", ")));
-                for status in statuses {
-                    bind_values.push(status.as_str().to_string());
-                }
-            }
-        } else if !query.include_archived.unwrap_or(false)
-            && !query.include_deleted.unwrap_or(false)
-        {
-            conditions.push("status != 'Archived'".to_string());
-        }
-
-        if let Some(priorities) = &query.priority {
-            if !priorities.is_empty() {
-                let placeholders: Vec<String> =
-                    priorities.iter().map(|_| "?".to_string()).collect();
-                conditions.push(format!("priority IN ({})", placeholders.join(", ")));
-                for priority in priorities {
-                    bind_values.push(priority.as_str().to_string());
-                }
-            }
-        }
-
-        if let Some(tags) = &query.tags {
-            for tag in tags {
-                conditions.push(
-                    "EXISTS (SELECT 1 FROM todo_tags tt WHERE tt.todo_id = todos.id AND tt.tag_name = ? COLLATE NOCASE)"
-                        .to_string(),
-                );
-                bind_values.push(tag.clone());
-            }
-        }
-
-        if let Some(keyword) = &query.keyword {
-            if !keyword.trim().is_empty() {
-                conditions.push("(title LIKE ? OR description LIKE ?)".to_string());
-                let pattern = format!("%{}%", keyword.trim());
-                bind_values.push(pattern.clone());
-                bind_values.push(pattern);
-            }
-        }
-
-        if let Some(after) = &query.due_date_after {
-            conditions.push("due_date IS NOT NULL AND due_date >= ?".to_string());
-            bind_values.push(after.clone());
-        }
-
-        if let Some(before) = &query.due_date_before {
-            // 半开区间上界，与 count_overdue / count_due_today 一致
-            conditions.push("due_date IS NOT NULL AND due_date < ?".to_string());
-            bind_values.push(before.clone());
-        }
-
-        let where_clause = conditions.join(" AND ");
-        let order_clause = build_order_clause(&query.sort_by, &query.sort_order);
-        let offset = (query.page.saturating_sub(1) as u64) * query.page_size as u64;
-
-        let count_sql = format!("SELECT COUNT(*) FROM todos WHERE {where_clause}");
-        let list_sql = format!(
-            "SELECT id, title, description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at
-             FROM todos WHERE {where_clause} ORDER BY {order_clause} LIMIT ? OFFSET ?"
-        );
-
         db.with_conn(|conn| {
-            let mut count_stmt = conn
-                .prepare(&count_sql)
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            let total: u64 = count_stmt
-                .query_row(rusqlite::params_from_iter(bind_values.iter()), |row| {
-                    row.get(0)
-                })
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-
-            let mut list_stmt = conn.prepare(&list_sql).map_err(|error| AppError::DbError {
-                message: error.to_string(),
-            })?;
-
-            let mut list_bind: Vec<String> = bind_values;
-            list_bind.push(query.page_size.to_string());
-            list_bind.push(offset.to_string());
-
-            let items = list_stmt
-                .query_map(rusqlite::params_from_iter(list_bind.iter()), map_row)
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-
+            let (items, total) = list_on(conn, query, true)?;
             Ok(PaginatedResponse {
                 items,
                 total,
@@ -438,39 +334,131 @@ impl TodoRepository {
         })
     }
 
-    /// 活跃 Todo/Doing + 最近启用的下次提醒（按 updated_at 升序，供 stale 截取）
-    pub fn list_active_for_planner(db: &Database) -> Result<Vec<TodoWithNextTrigger>, AppError> {
-        db.with_conn(|conn| {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.tags, t.created_at, t.updated_at, t.completed_at, t.deleted_at,
-                            (SELECT MIN(r.next_trigger_at) FROM reminders r WHERE r.todo_id = t.id AND r.enabled = 1) AS next_trigger
-                     FROM todos t
-                     WHERE t.deleted_at IS NULL AND t.status IN ('Todo', 'Doing')
-                     ORDER BY t.updated_at ASC",
-                )
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            let rows = stmt
-                .query_map([], |row| {
-                    let todo = map_row(row)?;
-                    let next_trigger: Option<String> = row.get(11)?;
-                    let next = next_trigger.map(|value| parse_datetime_unchecked(&value));
-                    Ok((todo, next))
-                })
-                .map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?;
-            let mut items = Vec::new();
-            for row in rows {
-                items.push(row.map_err(|error| AppError::DbError {
-                    message: error.to_string(),
-                })?);
-            }
-            Ok(items)
-        })
+    /// 列表项（无 COUNT）；供焦点台在同一连接内多次查询。
+    pub(crate) fn list_items_on(
+        conn: &Connection,
+        query: &ListTodoQuery,
+    ) -> Result<Vec<Todo>, AppError> {
+        let (items, _) = list_on(conn, query, false)?;
+        Ok(items)
     }
+}
+
+/// 列表查询；`with_total` 为 false 时跳过 COUNT（total 固定 0）。
+/// 列表 SELECT 用空 description，减 IPC 体积；详情仍走 get_by_id。
+fn list_on(
+    conn: &Connection,
+    query: &ListTodoQuery,
+    with_total: bool,
+) -> Result<(Vec<Todo>, u64), AppError> {
+    let mut conditions: Vec<String> = Vec::new();
+    let mut bind_values: Vec<String> = Vec::new();
+
+    if query.include_deleted.unwrap_or(false) {
+        conditions.push("deleted_at IS NOT NULL".to_string());
+    } else {
+        conditions.push("deleted_at IS NULL".to_string());
+    }
+
+    if let Some(statuses) = &query.status {
+        if !statuses.is_empty() {
+            let placeholders: Vec<String> = statuses.iter().map(|_| "?".to_string()).collect();
+            conditions.push(format!("status IN ({})", placeholders.join(", ")));
+            for status in statuses {
+                bind_values.push(status.as_str().to_string());
+            }
+        }
+    } else if !query.include_archived.unwrap_or(false) && !query.include_deleted.unwrap_or(false)
+    {
+        conditions.push("status != 'Archived'".to_string());
+    }
+
+    if let Some(priorities) = &query.priority {
+        if !priorities.is_empty() {
+            let placeholders: Vec<String> = priorities.iter().map(|_| "?".to_string()).collect();
+            conditions.push(format!("priority IN ({})", placeholders.join(", ")));
+            for priority in priorities {
+                bind_values.push(priority.as_str().to_string());
+            }
+        }
+    }
+
+    if let Some(tags) = &query.tags {
+        for tag in tags {
+            conditions.push(
+                "EXISTS (SELECT 1 FROM todo_tags tt WHERE tt.todo_id = todos.id AND tt.tag_name = ? COLLATE NOCASE)"
+                    .to_string(),
+            );
+            bind_values.push(tag.clone());
+        }
+    }
+
+    if let Some(keyword) = &query.keyword {
+        if !keyword.trim().is_empty() {
+            conditions.push("(title LIKE ? OR description LIKE ?)".to_string());
+            let pattern = format!("%{}%", keyword.trim());
+            bind_values.push(pattern.clone());
+            bind_values.push(pattern);
+        }
+    }
+
+    if let Some(after) = &query.due_date_after {
+        conditions.push("due_date IS NOT NULL AND due_date >= ?".to_string());
+        bind_values.push(after.clone());
+    }
+
+    if let Some(before) = &query.due_date_before {
+        // 半开区间上界，与 count_overdue / count_due_today 一致
+        conditions.push("due_date IS NOT NULL AND due_date < ?".to_string());
+        bind_values.push(before.clone());
+    }
+
+    let where_clause = conditions.join(" AND ");
+    let order_clause = build_order_clause(&query.sort_by, &query.sort_order);
+    let offset = (query.page.saturating_sub(1) as u64) * query.page_size as u64;
+
+    let total = if with_total {
+        let count_sql = format!("SELECT COUNT(*) FROM todos WHERE {where_clause}");
+        let mut count_stmt = conn
+            .prepare(&count_sql)
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+        count_stmt
+            .query_row(rusqlite::params_from_iter(bind_values.iter()), |row| {
+                row.get(0)
+            })
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?
+    } else {
+        0
+    };
+
+    let list_sql = format!(
+        "SELECT id, title, '' AS description, status, priority, due_date, tags, created_at, updated_at, completed_at, deleted_at
+         FROM todos WHERE {where_clause} ORDER BY {order_clause} LIMIT ? OFFSET ?"
+    );
+
+    let mut list_stmt = conn.prepare(&list_sql).map_err(|error| AppError::DbError {
+        message: error.to_string(),
+    })?;
+
+    let mut list_bind: Vec<String> = bind_values;
+    list_bind.push(query.page_size.to_string());
+    list_bind.push(offset.to_string());
+
+    let items = list_stmt
+        .query_map(rusqlite::params_from_iter(list_bind.iter()), map_row)
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+
+    Ok((items, total))
 }
 
 fn sync_todo_tags(

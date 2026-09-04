@@ -98,7 +98,7 @@ export function useTodos(): UseTodosReturn {
         todos.value = [...board.overdue, ...board.doing, ...board.dueToday];
         total.value = todos.value.length;
         page.value = 1;
-        pageSize.value = Math.max(pageSize.value, total.value);
+        // 焦点台不写回 pageSize，避免切回库模式后分页被永久放大
         return;
       }
 

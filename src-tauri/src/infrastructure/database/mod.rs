@@ -28,6 +28,22 @@ impl Database {
         })
     }
 
+    /// 内存库（单测）；跑完整迁移。
+    #[cfg(test)]
+    pub fn open_in_memory() -> Result<Self, AppError> {
+        let conn = Connection::open_in_memory().map_err(|error| AppError::DbError {
+            message: error.to_string(),
+        })?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")
+            .map_err(|error| AppError::DbError {
+                message: error.to_string(),
+            })?;
+        migrations::run_migrations(&conn)?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
     /// 持锁执行闭包，不开启 SQL 事务（每条语句自动提交）。
     ///
     /// `Mutex` 不可重入：闭包内禁止再调 `with_conn` / `with_tx`，应使用传入的 `&Connection`。

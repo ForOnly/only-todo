@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
+import { getTodo } from "@/api/todos";
 import AppTagChip from "@/components/common/AppTagChip.vue";
 import type { TodoDto } from "@/api/types";
 import { formatAbsoluteDateTime, formatRelativeAge, formatRelativeDue } from "@/utils/timeMeta";
@@ -16,7 +17,31 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const hasDescription = computed(() => props.todo.description?.trim() !== "");
+/** 列表 DTO 不含 description；展开 peek 时按需拉取全文 */
+const description = ref(props.todo.description ?? "");
+const descLoading = ref(false);
+
+watch(
+  () => props.todo.id,
+  async (id) => {
+    description.value = props.todo.description ?? "";
+    if (description.value.trim()) return;
+    descLoading.value = true;
+    try {
+      const full = await getTodo(id);
+      if (props.todo.id === id) {
+        description.value = full.description ?? "";
+      }
+    } catch {
+      // 保留空描述回退
+    } finally {
+      if (props.todo.id === id) descLoading.value = false;
+    }
+  },
+  { immediate: true },
+);
+
+const hasDescription = computed(() => description.value.trim() !== "");
 
 const dueLabel = computed(() => {
   if (!props.todo.dueDate) return null;
@@ -60,8 +85,10 @@ const statusLabel = computed(() => t(`status.${props.todo.status}`));
       <span class="meta-item">{{ $t("inspector.createdAt") }}: {{ createdLabel }}</span>
     </div>
 
-    <p class="peek-desc" :class="{ empty: !hasDescription }">
-      {{ hasDescription ? todo.description : $t("peek.noDescription") }}
+    <p class="peek-desc" :class="{ empty: !hasDescription && !descLoading }">
+      <template v-if="descLoading">{{ $t("common.loading") }}</template>
+      <template v-else-if="hasDescription">{{ description }}</template>
+      <template v-else>{{ $t("peek.noDescription") }}</template>
     </p>
   </section>
 </template>

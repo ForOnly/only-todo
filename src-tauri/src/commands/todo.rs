@@ -4,11 +4,12 @@ use crate::broadcast;
 use crate::domain::{
     status::{StatusActionDto, TodoStatus},
     todo::{
-        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTimePlannerQuery, ListTodoQuery,
-        ListWorkbenchQuery, PaginatedResponse, TimePlannerDto, TodoDto, UpdateTodoDto,
+        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTodoQuery, ListWorkbenchQuery,
+        PaginatedResponse, TodoDto, UpdateTodoDto,
     },
 };
 use crate::errors::AppError;
+use crate::events::WorkbenchMetaDto;
 use crate::services::todo_service::TodoService;
 use crate::state::AppState;
 
@@ -82,11 +83,11 @@ pub fn list_focus_board(
 }
 
 #[tauri::command]
-pub fn list_time_planner(
+pub fn get_workbench_meta(
     state: State<AppState>,
-    query: ListTimePlannerQuery,
-) -> Result<TimePlannerDto, AppError> {
-    TodoService::list_time_planner(&state.db, query)
+    event_limit: Option<u32>,
+) -> Result<WorkbenchMetaDto, AppError> {
+    TodoService::workbench_meta(&state.db, event_limit.unwrap_or(8))
 }
 
 #[tauri::command]
