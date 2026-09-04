@@ -38,7 +38,7 @@ function readVersions() {
   const lock = readJson(paths.lock);
   const tauri = readJson(paths.tauri);
   const cargoText = readFileSync(paths.cargo, "utf8");
-  const cargoMatch = cargoText.match(/^\[package\][^\[]*?^version\s*=\s*"([^"]+)"/ms);
+  const cargoMatch = cargoText.match(/^\[package\][^[]*?^version\s*=\s*"([^"]+)"/ms);
   if (!cargoMatch) {
     throw new Error("无法在 src-tauri/Cargo.toml 的 [package] 段解析 version");
   }
@@ -121,7 +121,7 @@ function writeVersions(next) {
 
   let cargoText = readFileSync(paths.cargo, "utf8");
   // 仅替换 [package] 段内第一个 version =
-  cargoText = cargoText.replace(/^(\[package\][^\[]*?^version\s*=\s*")([^"]+)(")/ms, `$1${next}$3`);
+  cargoText = cargoText.replace(/^(\[package\][^[]*?^version\s*=\s*")([^"]+)(")/ms, `$1${next}$3`);
   writeFileSync(paths.cargo, cargoText, "utf8");
 }
 
