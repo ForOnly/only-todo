@@ -48,7 +48,7 @@ mise run bump-version -- patch   # 同步四处版本（可选 tag / check）
 
 ## 发布
 
-Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 GitHub Actions 上构建，产物上传到 **已发布** 的 GitHub Release（含 `latest.json` 供应用内更新）。
+Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release.yml) 在 GitHub Actions 上构建，产物上传到 **已发布** 的 GitHub Release（含 `latest.json` 与国内代理用的 `latest-cn.json` 供应用内更新）。
 
 ### 触发方式
 
@@ -76,7 +76,15 @@ npm run bump -- patch tag
 git push && git push origin v1.0.0
 ```
 
-5. Actions 完成后，在 GitHub Releases 检查安装包与 `latest.json`（Release 名称、产物版本、`latest.json` 中的 `version` 均应与 tag 一致）
+5. Actions 完成后，在 GitHub Releases 检查安装包、`latest.json` 与 `latest-cn.json`（Release 名称、产物版本、manifest 中的 `version` 均应与 tag 一致；`latest-cn.json` 内下载 URL 带代理前缀）
+
+### 国内更新加速
+
+应用内更新 **优先** 请求代理上的 `latest-cn.json`（其中安装包 URL 已加公开 GitHub 代理前缀），失败则回落官方 `latest.json`。
+
+- 默认代理：`https://ghfast.top/`（发版时由 `scripts/rewrite-updater-manifest.mjs` 写入 `latest-cn.json`）
+- 可在仓库 **Settings → Secrets and variables → Actions → Variables** 设置 `GH_PROXY_PREFIX` 覆盖默认前缀；更换代理时还需同步修改 `tauri.conf.json` 的 `endpoints` 与 CSP `connect-src` 主机名
+- 公开代理为第三方服务，可能不稳定；签名仍校验文件内容，与下载域名无关
 
 ### 仓库设置
 

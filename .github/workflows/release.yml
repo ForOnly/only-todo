@@ -91,3 +91,26 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --bundles nsis
+
+      # 生成国内代理版 manifest：改写 platforms.*.url，signature 不变
+      - name: Publish China-proxy updater manifest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PROXY_PREFIX: ${{ vars.GH_PROXY_PREFIX }}
+        run: |
+          $appVersion = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $tag = "v$appVersion"
+          $prefix = if (-not [string]::IsNullOrWhiteSpace($env:GH_PROXY_PREFIX)) {
+            $env:GH_PROXY_PREFIX
+          } else {
+            "https://ghfast.top/"
+          }
+          gh release download $tag -p latest.json -D .
+          if (-not (Test-Path latest.json)) {
+            Write-Host "::error::latest.json not found on release $tag"
+            exit 1
+          }
+          node scripts/rewrite-updater-manifest.mjs latest.json latest-cn.json $prefix
+          gh release upload $tag latest-cn.json --clobber
+          Write-Host "Uploaded latest-cn.json to $tag (proxy=$prefix)"
