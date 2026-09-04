@@ -18,6 +18,7 @@ export default {
   header: {
     searchPlaceholder: "搜索全部任务…  /",
     clearSearch: "清除搜索",
+    newTask: "新建",
     settings: "设置",
   },
   planner: {
@@ -69,7 +70,6 @@ export default {
     viewAll: "查看全部",
     moreTags: "+{n}",
     searchTitle: "搜索结果",
-    inlineAdd: "添加任务，Enter 保存",
     empty: {
       searchTitle: "没有匹配的任务",
       searchHint: "试试别的关键字，或清除搜索。",
@@ -80,7 +80,7 @@ export default {
       doneTitle: "还没有完成记录",
       doneHint: "完成任务后会出现在这里。",
       defaultTitle: "暂无任务",
-      defaultHint: "按 n 或在上方输入开始。",
+      defaultHint: "按 n 或点「新建」开始。",
       defaultCta: "添加任务",
     },
   },
@@ -160,7 +160,10 @@ export default {
     dueDate: "截止日期",
     tags: "标签",
     tagsPlaceholder: "可选，逗号分隔",
+    moreOptions: "更多选项",
+    hideOptions: "收起选项",
     discardMessage: "未保存的任务内容将丢失。",
+    flushFailed: "当前任务未能保存，请先处理后再新建。",
   },
   settings: {
     title: "设置",
@@ -176,7 +179,7 @@ export default {
     enableNotifications: "启用提醒通知",
     list: "列表",
     defaultView: "打开主窗时",
-    defaultViewHint: "出厂为今日焦点台。选库内归类则打开主窗进入库；保存后不会立刻切换当前页面。",
+    defaultViewHint: "出厂为「全部」。保存后不会立刻切换当前页面。",
     defaultSort: "默认排序",
     direction: "方向",
     asc: "升序",
@@ -279,6 +282,8 @@ export default {
     titleRequired: "标题不能为空",
     titleTooLong: "标题不能超过 {n} 个字符",
     descriptionTooLong: "描述不能超过 {n} 个字符",
+    tooManyTags: "标签不能超过 {n} 个",
+    tagTooLong: "单个标签不能超过 {n} 个字符",
   },
   datetime: {
     placeholder: "未设置",

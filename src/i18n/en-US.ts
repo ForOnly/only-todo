@@ -18,6 +18,7 @@ export default {
   header: {
     searchPlaceholder: "Search all tasks…  /",
     clearSearch: "Clear search",
+    newTask: "New",
     settings: "Settings",
   },
   planner: {
@@ -69,7 +70,6 @@ export default {
     viewAll: "View all",
     moreTags: "+{n}",
     searchTitle: "Search results",
-    inlineAdd: "Add a task, Enter to save",
     empty: {
       searchTitle: "No matching tasks",
       searchHint: "Try another keyword, or clear the search.",
@@ -80,7 +80,7 @@ export default {
       doneTitle: "No completed tasks yet",
       doneHint: "Finished tasks appear here.",
       defaultTitle: "No tasks yet",
-      defaultHint: "Press n or type above to begin.",
+      defaultHint: "Press n or click New to begin.",
       defaultCta: "Add task",
     },
   },
@@ -160,7 +160,10 @@ export default {
     dueDate: "Due date",
     tags: "Tags",
     tagsPlaceholder: "Optional, comma-separated",
+    moreOptions: "More options",
+    hideOptions: "Hide options",
     discardMessage: "Unsaved task details will be lost.",
+    flushFailed: "Could not save the current task. Fix that before creating another.",
   },
   settings: {
     title: "Settings",
@@ -176,8 +179,7 @@ export default {
     enableNotifications: "Enable reminder notifications",
     list: "List",
     defaultView: "On open",
-    defaultViewHint:
-      "Defaults to the Today focus board. A library view opens the library instead; saving does not switch the current page.",
+    defaultViewHint: "Defaults to All. Saving does not switch the current page.",
     defaultSort: "Default sort",
     direction: "Order",
     asc: "Ascending",
@@ -282,6 +284,8 @@ export default {
     titleRequired: "Title is required",
     titleTooLong: "Title must be at most {n} characters",
     descriptionTooLong: "Description must be at most {n} characters",
+    tooManyTags: "At most {n} tags allowed",
+    tagTooLong: "Each tag must be at most {n} characters",
   },
   datetime: {
     placeholder: "Not set",

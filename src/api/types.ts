@@ -148,3 +148,5 @@ export const DEFAULT_CREATE_TODO_FORM = (): CreateTodoFormModel => ({
 
 export const TITLE_MAX_LENGTH = 200;
 export const DESCRIPTION_MAX_LENGTH = 5000;
+export const MAX_TAGS = 10;
+export const MAX_TAG_LEN = 30;

@@ -9,6 +9,7 @@ const emit = defineEmits<{
   "update:keyword": [value: string];
   search: [];
   clearSearch: [];
+  create: [];
   settings: [];
 }>();
 </script>
@@ -36,6 +37,7 @@ const emit = defineEmits<{
           ×
         </button>
       </div>
+      <AppButton variant="ghost" @click="emit('create')">{{ $t("header.newTask") }}</AppButton>
       <AppButton variant="ghost" @click="emit('settings')">{{ $t("header.settings") }}</AppButton>
     </div>
   </header>

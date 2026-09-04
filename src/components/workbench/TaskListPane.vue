@@ -22,8 +22,6 @@ const props = defineProps<{
   sortBy: SortBy;
   sortOrder: SortOrder;
   searching: boolean;
-  showInlineAdd: boolean;
-  inlinePlaceholder: string;
 }>();
 
 const emit = defineEmits<{
@@ -33,12 +31,11 @@ const emit = defineEmits<{
   nextPage: [];
   changeSort: [sortBy: SortBy];
   toggleSortOrder: [];
-  quickAdd: [title: string];
   peekEdit: [id: string];
+  create: [];
 }>();
 
 const { t } = useI18n();
-const quickTitle = ref("");
 
 /** peek 展开/收拢动画延迟卸载 */
 const PEEK_CLOSE_MS = 200;
@@ -99,19 +96,36 @@ const viewTitle = computed(() => {
 
 const emptyCopy = computed(() => {
   if (props.searching) {
-    return { title: t("list.empty.searchTitle"), hint: t("list.empty.searchHint") };
+    return {
+      title: t("list.empty.searchTitle"),
+      hint: t("list.empty.searchHint"),
+      showCta: false,
+    };
   }
   switch (props.view) {
     case "trash":
-      return { title: t("list.empty.trashTitle"), hint: t("list.empty.trashHint") };
+      return {
+        title: t("list.empty.trashTitle"),
+        hint: t("list.empty.trashHint"),
+        showCta: false,
+      };
     case "archived":
-      return { title: t("list.empty.archivedTitle"), hint: t("list.empty.archivedHint") };
+      return {
+        title: t("list.empty.archivedTitle"),
+        hint: t("list.empty.archivedHint"),
+        showCta: false,
+      };
     case "done":
-      return { title: t("list.empty.doneTitle"), hint: t("list.empty.doneHint") };
+      return {
+        title: t("list.empty.doneTitle"),
+        hint: t("list.empty.doneHint"),
+        showCta: false,
+      };
     default:
       return {
         title: t("list.empty.defaultTitle"),
         hint: t("list.empty.defaultHint"),
+        showCta: true,
       };
   }
 });
@@ -173,13 +187,6 @@ function listMetaToken(todo: TodoDto): string {
   if (due) return `${due}/${created}`;
   return created;
 }
-
-function submitQuickAdd() {
-  const title = quickTitle.value.trim();
-  if (!title) return;
-  emit("quickAdd", title);
-  quickTitle.value = "";
-}
 </script>
 
 <template>
@@ -209,20 +216,12 @@ function submitQuickAdd() {
     <div v-if="showLoadingHint" class="hint">{{ $t("common.loading") }}</div>
 
     <ul v-else class="todo-list" :class="{ refreshing: isRefreshing }">
-      <li v-if="showInlineAdd" class="quick-add">
-        <input
-          id="workbench-quick-add"
-          v-model="quickTitle"
-          type="text"
-          maxlength="200"
-          :placeholder="inlinePlaceholder"
-          @keydown.enter.prevent="submitQuickAdd"
-        />
-      </li>
-
       <li v-if="todos.length === 0" class="empty">
         <p class="empty-title">{{ emptyCopy.title }}</p>
         <p class="empty-hint">{{ emptyCopy.hint }}</p>
+        <AppButton v-if="emptyCopy.showCta" variant="primary" class="empty-cta" @click="emit('create')">
+          {{ $t("list.empty.defaultCta") }}
+        </AppButton>
       </li>
 
       <li
@@ -386,30 +385,6 @@ function submitQuickAdd() {
 
 .todo-list.refreshing {
   opacity: 0.72;
-}
-
-.quick-add {
-  padding: 8px 16px 8px 14px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.quick-add input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  color: var(--color-text);
-  padding: 6px 0;
-  box-sizing: border-box;
-}
-
-.quick-add input:focus {
-  outline: none;
-}
-
-.quick-add input::placeholder {
-  color: var(--color-muted);
 }
 
 .todo-item {
@@ -589,6 +564,10 @@ function submitQuickAdd() {
   margin: 0;
   font-size: 13px;
   color: var(--color-muted);
+}
+
+.empty-cta {
+  margin-top: 16px;
 }
 
 .pagination {

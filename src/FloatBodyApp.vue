@@ -159,7 +159,7 @@ async function submitQuickAdd() {
   creating.value = true;
   error.value = null;
   try {
-    await todoApi.createTodo({ title, priority: "Medium" });
+    await todoApi.createTodo({ title });
     quickTitle.value = "";
     try {
       applySession(await companionRefreshSession());

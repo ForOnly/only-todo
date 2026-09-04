@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { listen } from "@tauri-apps/api/event";
 
@@ -109,7 +109,7 @@ const settingsOpen = ref(false);
 const settingsError = ref<string | null>(null);
 const settingsSaving = ref(false);
 const createOpen = ref(false);
-const createInitialDue = ref<string | null>(null);
+const createInitialTags = ref<string[]>([]);
 const notificationEnabled = ref(true);
 const listDefaultSortRaw = ref('{"sort_by":"priority","sort_order":"desc"}');
 const listDefaultView = ref<WorkbenchView>("all");
@@ -126,11 +126,6 @@ const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
 const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
 const eventUnlisteners: (() => void)[] = [];
-
-const showQuickAdd = computed(() => {
-  if (searchActive.value) return false;
-  return view.value === "all" || view.value === "tag";
-});
 
 /** 同步设置到本地状态；不切换侧栏 view（避免主题/语言保存时跳视图） */
 async function loadAndApplySettings() {
@@ -291,12 +286,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
 
   if (event.key === "n") {
     event.preventDefault();
-    const quickAdd = document.getElementById("workbench-quick-add");
-    if (quickAdd) {
-      quickAdd.focus();
-    } else {
-      openCreateModal();
-    }
+    openCreateModal();
     return;
   }
 
@@ -356,8 +346,46 @@ async function navigateToTodo(id: string | null) {
 }
 
 function openCreateModal() {
-  createInitialDue.value = null;
+  if (createOpen.value) return;
+  createInitialTags.value =
+    !searchActive.value && view.value === "tag" && activeTag.value
+      ? [activeTag.value]
+      : [];
   createOpen.value = true;
+}
+
+/** 创建成功后露出列表并打开 Inspector */
+async function afterCreateOnMain(created: TodoDto) {
+  await loadTags();
+
+  const inList = () => todos.value.some((item) => item.id === created.id);
+
+  // 当前页可能不是第 1 页：先回到第 1 页再查（标签/全部分页场景）
+  if (!inList() && page.value !== 1) {
+    page.value = 1;
+    await fetchTodos();
+  }
+
+  // 搜索结果常不含新任务：清搜索后保留当前 view/tag
+  if (!inList() && searchActive.value) {
+    searchActive.value = false;
+    keyword.value = "";
+    page.value = 1;
+    await fetchTodos();
+  }
+
+  // 仍不可见（如 done/trash，或标签被用户删掉）：落到全部
+  if (!inList()) {
+    view.value = "all";
+    activeTag.value = null;
+    searchActive.value = false;
+    keyword.value = "";
+    page.value = 1;
+    await fetchTodos();
+  }
+
+  await selectTodo(created.id);
+  editingId.value = created.id;
 }
 
 async function closeDetail(): Promise<boolean> {
@@ -416,31 +444,18 @@ async function handleRestore() {
 
 async function handleCreateSubmit(dto: CreateTodoDto) {
   try {
+    if (!(await flushAutosave())) {
+      createModalRef.value?.resetSubmitting();
+      createModalRef.value?.setError(t("create.flushFailed"));
+      return;
+    }
     const created = await createTodo(dto);
     createOpen.value = false;
-    createInitialDue.value = null;
+    createInitialTags.value = [];
     createModalRef.value?.resetSubmitting();
-    await loadTags();
-    if (!todos.value.some((item) => item.id === created.id)) {
-      view.value = "all";
-      activeTag.value = null;
-      searchActive.value = false;
-      page.value = 1;
-      await fetchTodos();
-      await selectTodo(created.id);
-      editingId.value = created.id;
-    }
+    await afterCreateOnMain(created);
   } catch (err) {
     createModalRef.value?.setError(formatErrorMessage(err));
-  }
-}
-
-async function handleQuickAdd(title: string) {
-  try {
-    await createTodo({ title });
-    await loadTags();
-  } catch (err) {
-    listError.value = formatErrorMessage(err);
   }
 }
 
@@ -536,6 +551,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       v-model:keyword="keyword"
       @search="search"
       @clear-search="clearSearch"
+      @create="openCreateModal"
       @settings="
         settingsError = null;
         settingsOpen = true;
@@ -565,16 +581,14 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
           :sort-by="sortBy"
           :sort-order="sortOrder"
           :searching="searchActive"
-          :show-inline-add="showQuickAdd"
-          :inline-placeholder="$t('list.inlineAdd')"
           @select="handleSelect"
           @toggle-complete="handleToggleComplete"
           @prev-page="goToPage(page - 1)"
           @next-page="goToPage(page + 1)"
           @change-sort="handleChangeSort"
           @toggle-sort-order="handleToggleSortOrder"
-          @quick-add="handleQuickAdd"
           @peek-edit="handlePeekEdit"
+          @create="openCreateModal"
         />
       </div>
 
@@ -611,10 +625,10 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
     <CreateTodoModal
       ref="createModalRef"
       :open="createOpen"
-      :initial-due-date="createInitialDue"
+      :initial-tags="createInitialTags"
       @close="
         createOpen = false;
-        createInitialDue = null;
+        createInitialTags = [];
       "
       @submit="handleCreateSubmit"
     />
