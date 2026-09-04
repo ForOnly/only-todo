@@ -2,6 +2,7 @@ import { ref, type Ref } from "vue";
 
 import * as todoApi from "@/api/todos";
 import type { CreateTodoDto, SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
+import { MESSAGE_KEYS, useMessage } from "@/composables/useMessage";
 import { formatErrorMessage } from "@/utils/error";
 
 export interface UseTodosReturn {
@@ -10,7 +11,6 @@ export interface UseTodosReturn {
   page: Ref<number>;
   pageSize: Ref<number>;
   loading: Ref<boolean>;
-  error: Ref<string | null>;
   keyword: Ref<string>;
   searchActive: Ref<boolean>;
   view: Ref<WorkbenchView>;
@@ -18,7 +18,7 @@ export interface UseTodosReturn {
   sortBy: Ref<SortBy>;
   sortOrder: Ref<SortOrder>;
   selectedId: Ref<string | null>;
-  fetchTodos: () => Promise<void>;
+  fetchTodos: () => Promise<boolean>;
   createTodo: (dto: CreateTodoDto) => Promise<TodoDto>;
   selectTodo: (id: string | null) => Promise<void>;
   setView: (next: WorkbenchView, tag?: string | null) => void;
@@ -29,12 +29,12 @@ export interface UseTodosReturn {
 }
 
 export function useTodos(): UseTodosReturn {
+  const { error: showError, dismissByKey } = useMessage();
   const todos = ref<TodoDto[]>([]);
   const total = ref(0);
   const page = ref(1);
   const pageSize = ref(50);
   const loading = ref(false);
-  const error = ref<string | null>(null);
   const keyword = ref("");
   const searchActive = ref(false);
   const view = ref<WorkbenchView>("all");
@@ -44,12 +44,12 @@ export function useTodos(): UseTodosReturn {
   const selectedId = ref<string | null>(null);
   let listGen = 0;
 
-  async function fetchTodos(): Promise<void> {
+  async function fetchTodos(): Promise<boolean> {
     const gen = ++listGen;
     if (todos.value.length === 0) {
       loading.value = true;
     }
-    error.value = null;
+    dismissByKey(MESSAGE_KEYS.list);
     try {
       if (searchActive.value && keyword.value.trim()) {
         const result = await todoApi.listTodos({
@@ -60,11 +60,11 @@ export function useTodos(): UseTodosReturn {
           page: page.value,
           pageSize: pageSize.value,
         });
-        if (gen !== listGen) return;
+        if (gen !== listGen) return true;
         todos.value = result.items;
         total.value = result.total;
         page.value = result.page;
-        return;
+        return true;
       }
 
       const result = await todoApi.listWorkbenchTodos({
@@ -75,13 +75,15 @@ export function useTodos(): UseTodosReturn {
         page: page.value,
         pageSize: pageSize.value,
       });
-      if (gen !== listGen) return;
+      if (gen !== listGen) return true;
       todos.value = result.items;
       total.value = result.total;
       page.value = result.page;
+      return true;
     } catch (err) {
-      if (gen !== listGen) return;
-      error.value = formatErrorMessage(err);
+      if (gen !== listGen) return true;
+      showError(formatErrorMessage(err), { key: MESSAGE_KEYS.list });
+      return false;
     } finally {
       if (gen === listGen) {
         loading.value = false;
@@ -92,6 +94,7 @@ export function useTodos(): UseTodosReturn {
   async function createTodo(dto: CreateTodoDto): Promise<TodoDto> {
     const todo = await todoApi.createTodo(dto);
     selectedId.value = todo.id;
+    // 刷新失败只出 list Message，仍返回已创建任务，避免关窗失败/重复提交
     await fetchTodos();
     return todo;
   }
@@ -143,7 +146,6 @@ export function useTodos(): UseTodosReturn {
     page,
     pageSize,
     loading,
-    error,
     keyword,
     searchActive,
     view,

@@ -4,6 +4,7 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 import { confirm } from "@/composables/useAppConfirm";
+import { MESSAGE_KEYS, useMessage } from "@/composables/useMessage";
 
 const SKIPPED_VERSION_KEY = "only-todo:skipped-update-version";
 
@@ -26,6 +27,7 @@ export function useAppUpdater(options: {
   flushBeforeInstall: () => Promise<boolean>;
 }) {
   const { t, flushBeforeInstall } = options;
+  const { info, error: showError } = useMessage();
 
   const updating = ref(false);
   const checking = ref(false);
@@ -102,12 +104,7 @@ export function useAppUpdater(options: {
 
     if (!isUpdaterEnabled()) {
       if (manual) {
-        await confirm({
-          title: t("updater.title"),
-          message: t("updater.devOnly"),
-          confirmLabel: t("common.confirm"),
-          showCancel: false,
-        });
+        info(t("updater.devOnly"), { key: MESSAGE_KEYS.updater });
       }
       return;
     }
@@ -119,12 +116,7 @@ export function useAppUpdater(options: {
       const update = await check();
       if (!update) {
         if (manual) {
-          await confirm({
-            title: t("updater.title"),
-            message: t("updater.alreadyLatest"),
-            confirmLabel: t("common.confirm"),
-            showCancel: false,
-          });
+          info(t("updater.alreadyLatest"), { key: MESSAGE_KEYS.updater });
         }
         return;
       }
@@ -151,12 +143,7 @@ export function useAppUpdater(options: {
       }
 
       if (!(await flushBeforeInstall())) {
-        await confirm({
-          title: t("updater.title"),
-          message: t("updater.flushFailed"),
-          confirmLabel: t("common.confirm"),
-          showCancel: false,
-        });
+        showError(t("updater.flushFailed"), { key: MESSAGE_KEYS.updater });
         return;
       }
 
@@ -167,12 +154,7 @@ export function useAppUpdater(options: {
 
       const detail = err instanceof Error ? err.message : String(err);
       if (manual) {
-        await confirm({
-          title: t("updater.title"),
-          message: t("updater.failed", { detail }),
-          confirmLabel: t("common.confirm"),
-          showCancel: false,
-        });
+        showError(t("updater.failed", { detail }), { key: MESSAGE_KEYS.updater });
       } else {
         console.warn("[updater] auto check failed:", detail);
       }

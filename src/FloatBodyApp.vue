@@ -18,16 +18,17 @@ import {
 import FloatTaskList from "@/components/float/FloatTaskList.vue";
 import AppShellOverlays from "@/components/common/AppShellOverlays.vue";
 import { useCompanionDrag } from "@/composables/useCompanionDrag";
+import { MESSAGE_KEYS, useMessage } from "@/composables/useMessage";
 import { TAURI_EVENTS } from "@/constants/events";
 import { applyAppearance } from "@/utils/appearance";
 import { formatErrorMessage } from "@/utils/error";
 
 const { t } = useI18n();
+const { error: showError, dismissByKey } = useMessage();
 
 const todos = ref<TodoDto[]>([]);
 const session = ref<CompanionSession | null>(null);
 const loading = ref(false);
-const error = ref<string | null>(null);
 const selectedId = ref<string | null>(null);
 const visibleCount = ref(10);
 /** 与当前列表同查询的 total，用于「还有更多」；勿用 session.activeCount */
@@ -91,7 +92,7 @@ const shouldFocusQuickAdd = computed(() => {
 async function fetchTodos(): Promise<void> {
   const token = ++fetchToken;
   loading.value = todos.value.length === 0;
-  error.value = null;
+  dismissByKey(MESSAGE_KEYS.companion);
   try {
     const listResult = await todoApi.listTodos({
       status: ["Todo", "Doing"],
@@ -109,7 +110,7 @@ async function fetchTodos(): Promise<void> {
     }
   } catch (err) {
     if (token !== fetchToken) return;
-    error.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.companion });
     listTotal.value = 0;
   } finally {
     if (token === fetchToken) {
@@ -155,7 +156,7 @@ async function completeTodo(id: string) {
     }
     await fetchTodos();
   } catch (err) {
-    error.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.companion });
   }
 }
 
@@ -163,11 +164,13 @@ async function submitQuickAdd() {
   const title = quickTitle.value.trim();
   if (!title || creating.value) return;
   if (title.length > TITLE_MAX_LENGTH) {
-    error.value = t("validation.titleTooLong", { n: TITLE_MAX_LENGTH });
+    showError(t("validation.titleTooLong", { n: TITLE_MAX_LENGTH }), {
+      key: MESSAGE_KEYS.companion,
+    });
     return;
   }
   creating.value = true;
-  error.value = null;
+  dismissByKey(MESSAGE_KEYS.companion);
   try {
     await todoApi.createTodo({ title });
     quickTitle.value = "";
@@ -180,7 +183,7 @@ async function submitQuickAdd() {
     await nextTick();
     quickInput.value?.focus();
   } catch (err) {
-    error.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.companion });
   } finally {
     creating.value = false;
   }
@@ -192,7 +195,7 @@ async function minimize() {
     applySession(await companionMinimize());
   } catch (err) {
     console.error("minimize failed", err);
-    error.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.companion });
   }
 }
 
@@ -202,7 +205,7 @@ async function collapsePanel() {
     applySession(await companionCollapseToStrip());
   } catch (err) {
     console.error("collapsePanel failed", err);
-    error.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.companion });
   }
 }
 
@@ -481,8 +484,6 @@ onUnmounted(() => {
       />
     </form>
 
-    <p v-if="error" class="error">{{ error }}</p>
-
     <FloatTaskList
       :todos="todos"
       :selected-id="selectedId"
@@ -647,14 +648,5 @@ body,
 
 .quick-add.busy input {
   opacity: 0.65;
-}
-
-.error {
-  margin: 0 12px 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
-  font-size: 12px;
 }
 </style>

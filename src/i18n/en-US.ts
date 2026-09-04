@@ -14,6 +14,7 @@ export default {
     add: "Add",
     loading: "Loading...",
     brand: "Only Todo",
+    messageClose: "Dismiss",
   },
   header: {
     searchPlaceholder: "Search all tasks…  /",

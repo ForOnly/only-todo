@@ -32,8 +32,6 @@ const props = defineProps<{
   autostartEnabled: boolean;
   uiTheme: UiTheme;
   uiLocale: UiLocale;
-  /** 父组件保存失败时展示；成功时父组件关闭弹窗 */
-  error?: string | null;
   saving?: boolean;
   checkingUpdate?: boolean;
 }>();
@@ -297,8 +295,6 @@ async function requestClose() {
       </div>
     </section>
 
-    <p v-if="error" class="error">{{ error }}</p>
-
     <div class="app-modal-actions">
       <AppButton variant="ghost" :disabled="saving" @click="requestClose">
         {{ $t("common.cancel") }}
@@ -349,12 +345,6 @@ async function requestClose() {
   font-size: 12px;
   color: var(--color-muted);
   line-height: 1.4;
-}
-
-.error {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--color-danger);
 }
 
 .number-input {

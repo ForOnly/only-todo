@@ -32,6 +32,7 @@ import { TAURI_EVENTS } from "@/constants/events";
 import { coerceDefaultView } from "@/constants/workbenchViews";
 import { modalEscDepth } from "@/composables/useModalEscStack";
 import { useAppUpdater } from "@/composables/useAppUpdater";
+import { MESSAGE_KEYS, useMessage } from "@/composables/useMessage";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
 import { applyAppearance } from "@/utils/appearance";
@@ -46,7 +47,6 @@ const {
   page,
   pageSize,
   loading,
-  error: listError,
   keyword,
   searchActive,
   view,
@@ -70,7 +70,6 @@ const editingId = ref<string | null>(null);
 const {
   reminders,
   loading: remindersLoading,
-  error: remindersError,
   fetchReminders,
   addReminder,
   updateReminder,
@@ -87,7 +86,6 @@ const {
   editTags,
   saving,
   saveStatus,
-  error: detailError,
   isDirty,
   scheduleAutosave,
   flushAutosave,
@@ -105,8 +103,8 @@ const { updating, checking, progress, phase, statusMessage, indeterminate, runUp
     flushBeforeInstall: flushAutosave,
   });
 
+const { error: showError, dismissByKey } = useMessage();
 const settingsOpen = ref(false);
-const settingsError = ref<string | null>(null);
 const settingsSaving = ref(false);
 const createOpen = ref(false);
 const createInitialTags = ref<string[]>([]);
@@ -123,7 +121,6 @@ const uiTheme = ref<UiTheme>("system");
 const uiLocale = ref<UiLocale>("zh-CN");
 const allTags = ref<string[]>([]);
 const createModalRef = ref<InstanceType<typeof CreateTodoModal> | null>(null);
-const reminderError = ref<string | null>(null);
 const recentEvents = ref<EventDto[]>([]);
 const eventUnlisteners: (() => void)[] = [];
 
@@ -178,8 +175,7 @@ onMounted(async () => {
 
   eventUnlisteners.push(
     await listen(TAURI_EVENTS.OPEN_SETTINGS, () => {
-      settingsError.value = null;
-      settingsOpen.value = true;
+      openSettings();
     }),
   );
 
@@ -390,6 +386,8 @@ async function afterCreateOnMain(created: TodoDto) {
 
 async function closeDetail(): Promise<boolean> {
   if (!(await flushAutosave())) return false;
+  dismissByKey(MESSAGE_KEYS.inspector);
+  dismissByKey(MESSAGE_KEYS.reminders);
   editingId.value = null;
   return true;
 }
@@ -415,7 +413,7 @@ async function handleToggleComplete(todo: TodoDto) {
     }
     await fetchTodos();
   } catch (err) {
-    listError.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.list });
   }
 }
 
@@ -446,7 +444,7 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
   try {
     if (!(await flushAutosave())) {
       createModalRef.value?.resetSubmitting();
-      createModalRef.value?.setError(t("create.flushFailed"));
+      showError(t("create.flushFailed"), { key: MESSAGE_KEYS.createTodo });
       return;
     }
     const created = await createTodo(dto);
@@ -455,47 +453,44 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
     createModalRef.value?.resetSubmitting();
     await afterCreateOnMain(created);
   } catch (err) {
-    createModalRef.value?.setError(formatErrorMessage(err));
+    createModalRef.value?.resetSubmitting();
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.createTodo });
   }
 }
 
 async function handleAddReminder(datetime: string, repeatType?: RepeatType) {
   if (!editingId.value) return;
-  reminderError.value = null;
   try {
     await addReminder(editingId.value, datetime, repeatType);
   } catch (err) {
-    reminderError.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.reminders });
   }
 }
 
 async function handleUpdateReminder(id: string, datetime: string) {
   if (!editingId.value) return;
-  reminderError.value = null;
   try {
     await updateReminder(id, editingId.value, datetime);
   } catch (err) {
-    reminderError.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.reminders });
   }
 }
 
 async function handleRemoveReminder(id: string) {
   if (!editingId.value) return;
-  reminderError.value = null;
   try {
     await removeReminder(id, editingId.value);
   } catch (err) {
-    reminderError.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.reminders });
   }
 }
 
 async function handleSnoozeReminder(id: string, minutes: number) {
   if (!editingId.value) return;
-  reminderError.value = null;
   try {
     await snoozeReminder(id, editingId.value, minutes);
   } catch (err) {
-    reminderError.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.reminders });
   }
 }
 
@@ -516,7 +511,7 @@ function handleToggleSortOrder() {
 
 async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0]) {
   settingsSaving.value = true;
-  settingsError.value = null;
+  dismissByKey(MESSAGE_KEYS.settings);
   try {
     const settings = await updateSettings(payload);
     notificationEnabled.value = settings.notificationEnabled;
@@ -536,12 +531,23 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       setSort(sort.sortBy, sort.sortOrder);
     }
     // 保存默认视图不强制切换当前侧栏
+    dismissByKey(MESSAGE_KEYS.settings);
     settingsOpen.value = false;
   } catch (err) {
-    settingsError.value = formatErrorMessage(err);
+    showError(formatErrorMessage(err), { key: MESSAGE_KEYS.settings });
   } finally {
     settingsSaving.value = false;
   }
+}
+
+function openSettings() {
+  dismissByKey(MESSAGE_KEYS.settings);
+  settingsOpen.value = true;
+}
+
+function closeSettings() {
+  dismissByKey(MESSAGE_KEYS.settings);
+  settingsOpen.value = false;
 }
 </script>
 
@@ -552,10 +558,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       @search="search"
       @clear-search="clearSearch"
       @create="openCreateModal"
-      @settings="
-        settingsError = null;
-        settingsOpen = true;
-      "
+      @settings="openSettings"
     />
 
     <div class="body">
@@ -568,7 +571,6 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       />
 
       <div class="main-col">
-        <p v-if="listError" class="list-error">{{ listError }}</p>
         <TaskListPane
           :todos="todos"
           :selected-id="selectedId"
@@ -602,10 +604,8 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
           v-model:edit-tags="editTags"
           :saving="saving"
           :save-status="saveStatus"
-          :error="detailError"
           :reminders="reminders"
           :reminders-loading="remindersLoading"
-          :reminders-error="remindersError ?? reminderError"
           :suggested-tags="allTags"
           @field-change="scheduleAutosave"
           @close="closeDetail"
@@ -646,10 +646,9 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       :autostart-enabled="autostartEnabled"
       :ui-theme="uiTheme"
       :ui-locale="uiLocale"
-      :error="settingsError"
       :saving="settingsSaving"
       :checking-update="checking"
-      @close="settingsOpen = false"
+      @close="closeSettings"
       @update="handleSettingsUpdate"
       @check-update="runUpdateFlow(true)"
     />
@@ -694,12 +693,5 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   flex: 1;
   min-width: 0;
   min-height: 0;
-}
-
-.list-error {
-  margin: 0;
-  padding: 8px 16px;
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
 }
 </style>

@@ -14,6 +14,7 @@ export default {
     add: "添加",
     loading: "加载中...",
     brand: "Only Todo",
+    messageClose: "关闭提示",
   },
   header: {
     searchPlaceholder: "搜索全部任务…  /",

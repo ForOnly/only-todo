@@ -4,7 +4,6 @@ import { useI18n } from "vue-i18n";
 
 import AppButton from "@/components/common/AppButton.vue";
 import AppDateTimePicker from "@/components/common/AppDateTimePicker.vue";
-import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
 import AppTagChip from "@/components/common/AppTagChip.vue";
 import {
@@ -30,10 +29,8 @@ const props = defineProps<{
   editTags: string[];
   saving: boolean;
   saveStatus: SaveStatus;
-  error: string | null;
   reminders: ReminderDto[];
   remindersLoading: boolean;
-  remindersError: string | null;
   suggestedTags: string[];
 }>();
 
@@ -242,8 +239,6 @@ function onSnooze(reminderId: string, value: string) {
     </header>
 
     <div class="inspector-body">
-      <AppErrorBanner v-if="error" :message="error" />
-
       <template v-if="isDeleted">
         <p class="trash-note">{{ $t("inspector.trashNote") }}</p>
         <div class="action-row">
@@ -352,7 +347,6 @@ function onSnooze(reminderId: string, value: string) {
 
         <section class="reminders">
           <h3>{{ $t("inspector.reminders") }}</h3>
-          <AppErrorBanner v-if="remindersError" :message="remindersError" />
           <div v-if="remindersLoading" class="muted">{{ $t("inspector.loadingReminders") }}</div>
           <ul v-else class="reminder-list">
             <li v-for="reminder in reminders" :key="reminder.id" class="reminder-item">

@@ -5,11 +5,11 @@ import { useI18n } from "vue-i18n";
 import type { CreateTodoDto, CreateTodoFormModel } from "@/api/types";
 import { DEFAULT_CREATE_TODO_FORM, PRIORITY_OPTIONS } from "@/api/types";
 import { confirm } from "@/composables/useAppConfirm";
+import { MESSAGE_KEYS, useMessage } from "@/composables/useMessage";
 import { fromLocalDatetimeInput } from "@/utils/date";
 import { parseCreateTags, validateCreateTodoForm } from "@/utils/validation";
 import AppButton from "@/components/common/AppButton.vue";
 import AppDateTimePicker from "@/components/common/AppDateTimePicker.vue";
-import AppErrorBanner from "@/components/common/AppErrorBanner.vue";
 import AppModal from "@/components/common/AppModal.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
 
@@ -33,9 +33,9 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const { error: showError, dismissByKey } = useMessage();
 const form = ref<CreateTodoFormModel>(DEFAULT_CREATE_TODO_FORM());
 const baseline = ref("");
-const error = ref<string | null>(null);
 const submitting = ref(false);
 const closing = ref(false);
 const moreOpen = ref(false);
@@ -63,13 +63,15 @@ watch(
       } else {
         moreOpen.value = false;
       }
-      error.value = null;
+      dismissByKey(MESSAGE_KEYS.createTodo);
       submitting.value = false;
       closing.value = false;
       // 预填后再拍基线，避免一打开就 dirty
       baseline.value = formSnapshot(form.value);
       await nextTick();
       titleInput.value?.focus();
+    } else {
+      dismissByKey(MESSAGE_KEYS.createTodo);
     }
   },
 );
@@ -77,11 +79,11 @@ watch(
 function handleSubmit() {
   const validationError = validateCreateTodoForm(form.value);
   if (validationError) {
-    error.value = validationError;
+    showError(validationError, { key: MESSAGE_KEYS.createTodo });
     return;
   }
 
-  error.value = null;
+  dismissByKey(MESSAGE_KEYS.createTodo);
   submitting.value = true;
 
   const dto: CreateTodoDto = {
@@ -110,11 +112,6 @@ function resetSubmitting() {
   submitting.value = false;
 }
 
-function setError(message: string) {
-  error.value = message;
-  submitting.value = false;
-}
-
 /** Esc / × / 取消：有草稿则先确认再关；创建中禁止关掉以免误以为已取消 */
 async function requestClose() {
   if (closing.value || submitting.value) return;
@@ -132,7 +129,7 @@ async function requestClose() {
   emit("close");
 }
 
-defineExpose({ resetSubmitting, setError });
+defineExpose({ resetSubmitting });
 </script>
 
 <template>
@@ -144,8 +141,6 @@ defineExpose({ resetSubmitting, setError });
     :title="$t('create.title')"
     @close="requestClose"
   >
-    <AppErrorBanner v-if="error" :message="error" />
-
     <label class="app-field">
       <span>
         {{ $t("create.titleLabel") }}

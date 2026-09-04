@@ -10,6 +10,7 @@ import type { ReminderDto, RepeatType, TodoDto, TodoStatus, UpdateTodoDto } from
 import { fromLocalDatetimeInput, toLocalDatetimeInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 import { confirm } from "@/composables/useAppConfirm";
+import { MESSAGE_KEYS, useMessage } from "@/composables/useMessage";
 import { i18n } from "@/i18n";
 
 const AUTOSAVE_MS = 450;
@@ -20,7 +21,6 @@ export type SaveStatus = "idle" | "dirty" | "saving" | "saved";
 export interface UseRemindersReturn {
   reminders: Ref<ReminderDto[]>;
   loading: Ref<boolean>;
-  error: Ref<string | null>;
   fetchReminders: (todoId: string) => Promise<void>;
   addReminder: (todoId: string, localDatetime: string, repeatType?: RepeatType) => Promise<void>;
   updateReminder: (id: string, todoId: string, localDatetime: string) => Promise<void>;
@@ -37,7 +37,6 @@ export interface UseTodoDetailReturn {
   editTags: Ref<string[]>;
   saving: Ref<boolean>;
   saveStatus: Ref<SaveStatus>;
-  error: Ref<string | null>;
   isDirty: () => boolean;
   save: () => Promise<boolean>;
   scheduleAutosave: () => void;
@@ -49,22 +48,22 @@ export interface UseTodoDetailReturn {
 }
 
 export function useReminders(selectedId: Ref<string | null>): UseRemindersReturn {
+  const { error: showError, dismissByKey } = useMessage();
   const reminders = ref<ReminderDto[]>([]);
   const loading = ref(false);
-  const error = ref<string | null>(null);
   let reminderGen = 0;
 
   async function fetchReminders(todoId: string): Promise<void> {
     const gen = ++reminderGen;
     loading.value = true;
-    error.value = null;
+    dismissByKey(MESSAGE_KEYS.reminders);
     try {
       const list = await reminderApi.listReminders(todoId);
       if (gen !== reminderGen) return;
       reminders.value = list;
     } catch (err) {
       if (gen !== reminderGen) return;
-      error.value = formatErrorMessage(err);
+      showError(formatErrorMessage(err), { key: MESSAGE_KEYS.reminders });
       reminders.value = [];
     } finally {
       if (gen === reminderGen) {
@@ -115,7 +114,6 @@ export function useReminders(selectedId: Ref<string | null>): UseRemindersReturn
   return {
     reminders,
     loading,
-    error,
     fetchReminders,
     addReminder,
     updateReminder,
@@ -128,6 +126,7 @@ export function useTodoDetail(
   selectedId: Ref<string | null>,
   onUpdated: () => Promise<void>,
 ): UseTodoDetailReturn {
+  const { error: showError, dismissByKey } = useMessage();
   const detail = ref<TodoDto | null>(null);
   const editTitle = ref("");
   const editDescription = ref("");
@@ -136,7 +135,6 @@ export function useTodoDetail(
   const editTags = ref<string[]>([]);
   const saving = ref(false);
   const saveStatus = ref<SaveStatus>("idle");
-  const error = ref<string | null>(null);
   let loadGen = 0;
   let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   let savedClearTimer: ReturnType<typeof setTimeout> | null = null;
@@ -190,10 +188,10 @@ export function useTodoDetail(
       const todo = await todoApi.getTodo(id);
       if (gen !== loadGen) return;
       applyDetailToForm(todo);
-      error.value = null;
+      dismissByKey(MESSAGE_KEYS.inspector);
     } catch (err) {
       if (gen !== loadGen) return;
-      error.value = formatErrorMessage(err);
+      showError(formatErrorMessage(err), { key: MESSAGE_KEYS.inspector });
       detail.value = null;
       saveStatus.value = "idle";
     } finally {
@@ -255,14 +253,14 @@ export function useTodoDetail(
     };
 
     if (!snap.title) {
-      error.value = i18n.global.t("validation.titleRequired");
+      showError(i18n.global.t("validation.titleRequired"), { key: MESSAGE_KEYS.inspector });
       return false;
     }
 
     savePromise = (async () => {
       saving.value = true;
       saveStatus.value = "saving";
-      error.value = null;
+      dismissByKey(MESSAGE_KEYS.inspector);
       try {
         const dto: UpdateTodoDto = {
           id: snap.id,
@@ -282,11 +280,12 @@ export function useTodoDetail(
           detail.value = updated;
           syncSaveStatus();
         }
+        dismissByKey(MESSAGE_KEYS.inspector);
         await onUpdated();
         return true;
       } catch (err) {
         if (selectedId.value === snap.id) {
-          error.value = formatErrorMessage(err);
+          showError(formatErrorMessage(err), { key: MESSAGE_KEYS.inspector });
           syncSaveStatus();
         }
         return false;
@@ -344,9 +343,10 @@ export function useTodoDetail(
       const updated = await todoApi.transitionTodo(todoId, status);
       if (selectedId.value !== todoId) return;
       applyDetailToForm(updated);
+      dismissByKey(MESSAGE_KEYS.inspector);
       await onUpdated();
     } catch (err) {
-      error.value = formatErrorMessage(err);
+      showError(formatErrorMessage(err), { key: MESSAGE_KEYS.inspector });
     }
   }
 
@@ -363,10 +363,11 @@ export function useTodoDetail(
     try {
       await todoApi.deleteTodo(todoId);
       selectedId.value = null;
+      dismissByKey(MESSAGE_KEYS.inspector);
       await onUpdated();
       return true;
     } catch (err) {
-      error.value = formatErrorMessage(err);
+      showError(formatErrorMessage(err), { key: MESSAGE_KEYS.inspector });
       return false;
     }
   }
@@ -378,10 +379,11 @@ export function useTodoDetail(
       const updated = await todoApi.restoreTodo(todoId);
       if (selectedId.value !== todoId) return false;
       applyDetailToForm(updated);
+      dismissByKey(MESSAGE_KEYS.inspector);
       await onUpdated();
       return true;
     } catch (err) {
-      error.value = formatErrorMessage(err);
+      showError(formatErrorMessage(err), { key: MESSAGE_KEYS.inspector });
       return false;
     }
   }
@@ -395,7 +397,6 @@ export function useTodoDetail(
     editTags,
     saving,
     saveStatus,
-    error,
     isDirty,
     save,
     scheduleAutosave,
