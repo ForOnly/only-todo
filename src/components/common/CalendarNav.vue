@@ -73,26 +73,20 @@ function nextMonth() {
 <template>
   <div class="cal-nav">
     <div class="nav-row">
+      <button type="button" class="nav-btn" :aria-label="$t('datetime.prevYear')" @click="prevYear">
+        ‹
+      </button>
       <AppSelect
         v-model="yearModel"
         :options="yearOptions"
         :compact="size === 'compact'"
         :teleport="true"
       />
-      <button type="button" class="nav-btn" :aria-label="$t('datetime.prevYear')" @click="prevYear">
-        ‹
-      </button>
       <button type="button" class="nav-btn" :aria-label="$t('datetime.nextYear')" @click="nextYear">
         ›
       </button>
     </div>
     <div class="nav-row">
-      <AppSelect
-        v-model="monthModel"
-        :options="monthOptions"
-        :compact="size === 'compact'"
-        :teleport="true"
-      />
       <button
         type="button"
         class="nav-btn"
@@ -101,6 +95,12 @@ function nextMonth() {
       >
         ‹
       </button>
+      <AppSelect
+        v-model="monthModel"
+        :options="monthOptions"
+        :compact="size === 'compact'"
+        :teleport="true"
+      />
       <button
         type="button"
         class="nav-btn"

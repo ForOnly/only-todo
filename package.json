@@ -12,7 +12,8 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "gen:types": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-ts"
+    "gen:types": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-ts",
+    "bump": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

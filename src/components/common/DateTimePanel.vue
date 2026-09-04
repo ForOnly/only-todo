@@ -83,6 +83,10 @@ onUnmounted(() => {
   document.removeEventListener("pointerdown", onDocPointer, true);
   window.removeEventListener("keydown", onKeydown, true);
 });
+
+defineExpose({
+  panelEl: panelRef,
+});
 </script>
 
 <template>
@@ -100,7 +104,8 @@ onUnmounted(() => {
 .panel-wrap {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  /* 高于 AppModal(1000)，与 AppSelect / ContextMenu 同级 */
+  z-index: 1100;
   pointer-events: none;
 }
 
@@ -115,7 +120,7 @@ onUnmounted(() => {
 }
 
 .panel {
-  position: absolute;
+  /* position 由父组件 inline fixed 控制 */
   width: 300px;
   padding: 14px;
   border: 1px solid var(--color-border);

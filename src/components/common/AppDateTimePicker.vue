@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 
 import CalendarPanel from "./CalendarPanel.vue";
@@ -40,7 +40,12 @@ const { t, locale } = useI18n();
 
 const open = ref(false);
 const triggerRef = ref<HTMLElement | null>(null);
+const panelHost = ref<{ panelEl: HTMLElement | null } | null>(null);
 const panelStyle = ref<Record<string, string>>({});
+
+/** 尚未量到 DOM 时的兜底尺寸（日历+时分+操作栏） */
+const FALLBACK_PANEL_W = 300;
+const FALLBACK_PANEL_H = 420;
 
 // 本地 buffer：选中后暂存，确认后才 emit
 const bufferValue = ref("");
@@ -86,20 +91,23 @@ const displayText = computed(() => {
   });
 });
 
-// ── 面板定位 ──
+// ── 面板定位（实测高度 + 视口夹紧）──
 function placePanel() {
   const el = triggerRef.value;
   if (!el) return;
   const rect = el.getBoundingClientRect();
-  const panelW = 300;
-  const panelH = 380;
+  const panelEl = panelHost.value?.panelEl ?? null;
+  const panelW = panelEl?.offsetWidth || FALLBACK_PANEL_W;
+  const panelH = panelEl?.offsetHeight || FALLBACK_PANEL_H;
   const spaceBelow = window.innerHeight - rect.bottom;
   const openUp = spaceBelow < panelH + 8 && rect.top > spaceBelow;
-  let top = openUp ? Math.max(8, rect.top - panelH - 4) : rect.bottom + 4;
+  let top = openUp ? rect.top - panelH - 4 : rect.bottom + 4;
   let left = rect.left;
-  if (left + panelW > window.innerWidth - 8) {
-    left = Math.max(8, window.innerWidth - panelW - 8);
-  }
+  // 视口夹紧，避免上下/左右被裁切
+  top = Math.min(top, window.innerHeight - panelH - 8);
+  top = Math.max(8, top);
+  left = Math.min(left, window.innerWidth - panelW - 8);
+  left = Math.max(8, left);
   panelStyle.value = {
     position: "fixed",
     top: `${top}px`,
@@ -108,8 +116,42 @@ function placePanel() {
   };
 }
 
+function onScrollReposition(event: Event) {
+  if (!open.value) return;
+  const t = event.target;
+  const panelEl = panelHost.value?.panelEl ?? null;
+  if (t instanceof Node && panelEl?.contains(t)) return;
+  placePanel();
+}
+
+function onResize() {
+  if (open.value) placePanel();
+}
+
+function bindOpenListeners() {
+  document.addEventListener("scroll", onScrollReposition, true);
+  window.addEventListener("resize", onResize);
+}
+
+function unbindOpenListeners() {
+  document.removeEventListener("scroll", onScrollReposition, true);
+  window.removeEventListener("resize", onResize);
+}
+
+watch(open, (v) => {
+  if (v) {
+    bindOpenListeners();
+  } else {
+    unbindOpenListeners();
+  }
+});
+
+onUnmounted(() => {
+  unbindOpenListeners();
+});
+
 // ── 打开面板 ──
-function openPanel() {
+async function openPanel() {
   if (props.disabled) return;
   const d = parseValue(props.modelValue) ?? new Date();
   viewYear.value = d.getFullYear();
@@ -118,8 +160,11 @@ function openPanel() {
   minute.value = d.getMinutes();
   second.value = d.getSeconds();
   bufferValue.value = props.modelValue;
+  // 先用兜底尺寸占位，打开后再按实测高度重算
   placePanel();
   open.value = true;
+  await nextTick();
+  placePanel();
 }
 
 // ── 事件 ──
@@ -170,6 +215,7 @@ function handlePanelConfirm() {
       {{ displayText }}
     </button>
     <DateTimePanel
+      ref="panelHost"
       :open="open"
       :teleport="teleport"
       :panel-style="panelStyle"

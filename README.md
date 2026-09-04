@@ -43,6 +43,7 @@ mise run gen-types-check  # 导出后检查 generated 无漂移
 mise run format        # Prettier 格式化前端
 mise run format-check  # Prettier 检查前端格式
 mise run build         # 构建生产包（Tauri）
+mise run bump-version -- patch   # 同步四处版本（可选 tag / check）
 ```
 
 ## 发布
@@ -57,13 +58,22 @@ Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release
 ### 发版前
 
 1. 合并到 `main`，确认 CI 通过
-2. 同步三处版本号：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`（三者必须相同）
-3. 打 tag：**必须**为 `v` + 上述版本号（如版本 `1.0.0` → tag `v1.0.0`）。CI 会校验 tag 与 `tauri.conf.json` 一致，不一致则构建失败
-4. 提交后推送 tag：
+2. 用 bump 脚本同步四处版本（`package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`）：
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+npm run bump -- patch          # 或 minor / major / 1.2.3
+npm run bump -- check          # 仅校验四处一致（也可用 node scripts/bump-version.mjs --check）
+# 可选：写版本 + commit + annotated tag（不 push）
+npm run bump -- patch tag
+```
+
+也可：`mise run bump-version -- patch`
+
+3. 打 tag：**必须**为 `v` + 上述版本号（如版本 `1.0.0` → tag `v1.0.0`）。若已用 `--tag` 则跳过本步手打。CI 会校验 tag 与 `tauri.conf.json` 一致，不一致则构建失败
+4. 推送 commit 与 tag：
+
+```bash
+git push && git push origin v1.0.0
 ```
 
 5. Actions 完成后，在 GitHub Releases 检查安装包与 `latest.json`（Release 名称、产物版本、`latest.json` 中的 `version` 均应与 tag 一致）

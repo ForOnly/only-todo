@@ -62,6 +62,10 @@ dir = "src-tauri"
 description = "本地复现 CI（format/lint/构建/rust/test/gen-types）"
 depends = ["format-check", "lint", "build-fe", "check", "clippy", "test", "gen-types-check"]
 
+[tasks.bump-version]
+description = "同步四处版本号（patch|minor|major|x.y.z，可选 tag / check）"
+run = "node scripts/bump-version.mjs"
+
 [tasks.clean]
 description = "清理 Rust 编译产物"
 run = "cargo clean"

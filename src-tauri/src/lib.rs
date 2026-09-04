@@ -72,12 +72,15 @@ pub fn run() {
             ensure_toast_registration();
 
             let db = Database::new(app.handle())?;
-            // 幂等：JSON tags → tags / todo_tags（失败则阻止启动，避免筛选与展示不一致）
-            TodoRepository::backfill_normalized_tags(&db).map_err(|error| {
-                tracing::error!("tag normalize backfill failed: {error}");
-                error
-            })?;
+            // 尽早 manage，缩短 WebView 在 AppState 就绪前 invoke 的竞态窗口
             app.manage(AppState { db });
+            // 幂等：JSON tags → tags / todo_tags（失败则阻止启动，避免筛选与展示不一致）
+            TodoRepository::backfill_normalized_tags(&app.state::<AppState>().db).map_err(
+                |error| {
+                    tracing::error!("tag normalize backfill failed: {error}");
+                    error
+                },
+            )?;
             app.manage(PendingNavigation(Mutex::new(None)));
             app.manage(FloatHost::new());
 
@@ -181,6 +184,11 @@ fn apply_startup_windows(app: &tauri::AppHandle) -> Result<(), Box<dyn std::erro
             let _ = main.hide();
         }
         let _ = commands::window::show_floating_window_impl(app);
+    } else if let Some(main) = app.get_webview_window("main") {
+        // main 在 conf 中 visible:false，setup 完成后再显示，避免 AppState 未就绪时的错误首屏
+        let _ = main.show();
+        let _ = main.unminimize();
+        let _ = main.set_focus();
     }
 
     Ok(())
