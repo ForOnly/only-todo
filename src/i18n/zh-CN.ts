@@ -257,6 +257,7 @@ export default {
     hideToTray: "隐藏到托盘",
     quickAddPlaceholder: "添加任务，Enter 保存",
     editHint: "单击预览 · 详情双击打开主窗",
+    moreInMain: "还有 {n} 条，打开主窗口查看",
     openMain: "主窗口",
     noDescription: "暂无描述",
     dockToEdge: "贴到边缘",

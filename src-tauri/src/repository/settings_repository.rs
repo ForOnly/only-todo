@@ -24,7 +24,7 @@ impl SettingsRepository {
             .unwrap_or(WorkbenchView::All);
         let float_always_on_top =
             Self::get_bool_on(conn, "companion.always_on_top")?.unwrap_or(true);
-        let float_visible_count = Self::get_u32_on(conn, "companion.visible_count")?.unwrap_or(5);
+        let float_visible_count = Self::get_u32_on(conn, "companion.visible_count")?.unwrap_or(10);
         let float_auto_show = Self::get_bool_on(conn, "companion.auto_show")?.unwrap_or(true);
         let float_default_mode = Self::get_value_on(conn, "companion.home_shape")?
             .and_then(|v| HomeShape::from_str(&v))

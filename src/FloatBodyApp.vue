@@ -29,7 +29,9 @@ const session = ref<CompanionSession | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const selectedId = ref<string | null>(null);
-const visibleCount = ref(5);
+const visibleCount = ref(10);
+/** 与当前列表同查询的 total，用于「还有更多」；勿用 session.activeCount */
+const listTotal = ref(0);
 const quickTitle = ref("");
 const creating = ref(false);
 const quickInput = ref<HTMLInputElement | null>(null);
@@ -48,6 +50,7 @@ const { startDrag, onPointerUp } = useCompanionDrag("body");
 const isDocked = computed(() => session.value?.placement === "docked");
 const activeCount = computed(() => session.value?.activeCount ?? 0);
 const isPreview = computed(() => session.value?.panelMode === "preview");
+const moreCount = computed(() => Math.max(0, listTotal.value - todos.value.length));
 /** × 提示：圆球家临时板「回球」，其余「收成条」 */
 const collapseLabel = computed(() => {
   const current = session.value;
@@ -99,6 +102,7 @@ async function fetchTodos(): Promise<void> {
     });
     if (token !== fetchToken) return;
     todos.value = listResult.items;
+    listTotal.value = listResult.total;
     // 列表刷新后若预览项已不在，关闭预览
     if (selectedId.value && !todos.value.some((t) => t.id === selectedId.value)) {
       selectedId.value = null;
@@ -106,6 +110,7 @@ async function fetchTodos(): Promise<void> {
   } catch (err) {
     if (token !== fetchToken) return;
     error.value = formatErrorMessage(err);
+    listTotal.value = 0;
   } finally {
     if (token === fetchToken) {
       loading.value = false;
@@ -132,6 +137,11 @@ async function openMainWithTodo(id?: string | null) {
 
 async function openMainWindow() {
   await openMainWithTodo(selectedId.value);
+}
+
+/** 「还有更多」：无 todo 定位，避免带上当前预览 id */
+async function openMainForMore() {
+  await todoApi.showMainWindow();
 }
 
 async function completeTodo(id: string) {
@@ -477,8 +487,10 @@ onUnmounted(() => {
       :todos="todos"
       :selected-id="selectedId"
       :loading="loading"
+      :more-count="moreCount"
       @select="selectTodo"
       @open-main="openMainWithTodo"
+      @open-more="openMainForMore"
       @complete="completeTodo"
       @close-peek="closeDetail"
     />

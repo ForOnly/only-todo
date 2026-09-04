@@ -9,11 +9,14 @@ const props = defineProps<{
   todos: TodoDto[];
   selectedId: string | null;
   loading: boolean;
+  /** 未展示的剩余条数；>0 时显示底栏「还有更多」 */
+  moreCount: number;
 }>();
 
 const emit = defineEmits<{
   select: [id: string];
   openMain: [id: string];
+  openMore: [];
   complete: [id: string];
   closePeek: [];
 }>();
@@ -58,6 +61,10 @@ onUnmounted(() => {
 
 const showLoadingHint = computed(() => props.loading && props.todos.length === 0);
 const isRefreshing = computed(() => props.loading && props.todos.length > 0);
+const showMoreFooter = computed(() => props.moreCount > 0 && props.todos.length > 0);
+const showEditHint = computed(
+  () => props.todos.length > 0 && !props.selectedId && props.moreCount <= 0,
+);
 </script>
 
 <template>
@@ -112,7 +119,12 @@ const isRefreshing = computed(() => props.loading && props.todos.length > 0);
         <p class="caption">{{ $t("companion.editHint") }}</p>
       </li>
     </ul>
-    <p v-if="todos.length > 0 && !selectedId" class="list-caption">
+    <div v-if="showMoreFooter" class="list-footer">
+      <button type="button" class="more-btn" @click="emit('openMore')">
+        {{ $t("companion.moreInMain", { n: moreCount }) }}
+      </button>
+    </div>
+    <p v-else-if="showEditHint" class="list-caption">
       {{ $t("companion.editHint") }}
     </p>
   </div>
@@ -130,7 +142,7 @@ const isRefreshing = computed(() => props.loading && props.todos.length > 0);
 ul {
   list-style: none;
   margin: 0;
-  padding: 4px 8px 0;
+  padding: 2px 8px 0;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -157,8 +169,8 @@ ul.refreshing {
 .row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 6px 8px;
   cursor: pointer;
   border-left: 3px solid var(--color-priority-low);
   border-radius: var(--radius-md);
@@ -221,7 +233,7 @@ ul.refreshing {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -232,7 +244,7 @@ ul.refreshing {
   display: block;
   font-size: 11px;
   color: var(--color-muted);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .due-overdue,
@@ -262,7 +274,7 @@ ul.refreshing {
 }
 
 .hint {
-  padding: 28px 16px;
+  padding: 20px 16px;
   color: var(--color-muted);
   font-size: 13px;
   text-align: center;
@@ -275,16 +287,38 @@ ul.refreshing {
 
 .hint .caption,
 .list-caption {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   font-size: 11px;
   color: var(--color-muted);
   opacity: 0.85;
 }
 
+.list-footer,
 .list-caption {
-  margin: 0;
-  padding: 6px 12px 10px;
-  text-align: center;
   flex-shrink: 0;
+  margin: 0;
+  padding: 4px 10px 8px;
+  text-align: center;
+}
+
+.more-btn {
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.more-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 </style>

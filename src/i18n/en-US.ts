@@ -259,6 +259,7 @@ export default {
     hideToTray: "Hide to tray",
     quickAddPlaceholder: "Add task, Enter to save",
     editHint: "Click to preview · double-click detail to open main",
+    moreInMain: "{n} more — open main window",
     openMain: "Main",
     noDescription: "No description",
     dockToEdge: "Dock to edge",
