@@ -58,18 +58,18 @@ Windows 安装包由 [`.github/workflows/release.yml`](.github/workflows/release
 ### 发版前
 
 1. 合并到 `main`，确认 CI 通过
-2. 用 bump 脚本同步四处版本（`package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`）：
+2. 用 bump 脚本同步版本并（可选）commit + tag。会写入/提交：`package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`：
 
 ```bash
-npm run bump -- patch          # 或 minor / major / 1.2.3
-npm run bump -- check          # 仅校验四处一致（也可用 node scripts/bump-version.mjs --check）
-# 可选：写版本 + commit + annotated tag（不 push）
+mise run bump-version -- patch tag   # 推荐；或 minor / major / 1.2.3
+# 等价：
 npm run bump -- patch tag
+npm run bump -- check                # 仅校验版本一致
 ```
 
-也可：`mise run bump-version -- patch`
+也可不带 `tag`：只写版本，再手动 commit / `git tag -a`。
 
-3. 打 tag：**必须**为 `v` + 上述版本号（如版本 `1.0.0` → tag `v1.0.0`）。若已用 `--tag` 则跳过本步手打。CI 会校验 tag 与 `tauri.conf.json` 一致，不一致则构建失败
+3. 打 tag：**必须**为 `v` + 上述版本号（如版本 `1.0.0` → tag `v1.0.0`）。若已用 `tag` 则跳过本步手打。CI 会校验 tag 与 `tauri.conf.json` 一致，不一致则构建失败
 4. 推送 commit 与 tag：
 
 ```bash

@@ -129,37 +129,54 @@ function gitPorcelain() {
   return execSync("git status --porcelain", { cwd: root, encoding: "utf8" }).trim();
 }
 
+/** 从 `git status --porcelain` 一行解析路径（兼容重命名）。 */
+function porcelainPath(line) {
+  const m = line.match(/^.. (.*)$/);
+  if (!m) return null;
+  let path = m[1];
+  if (path.startsWith('"') && path.endsWith('"')) {
+    try {
+      path = JSON.parse(path);
+    } catch {
+      path = path.slice(1, -1);
+    }
+  }
+  if (path.includes(" -> ")) {
+    path = path.split(" -> ").pop();
+  }
+  return path.replace(/\\/g, "/");
+}
+
+const RELEASE_FILES = [
+  "package.json",
+  "package-lock.json",
+  "src-tauri/tauri.conf.json",
+  "src-tauri/Cargo.toml",
+  "src-tauri/Cargo.lock",
+];
+
 function createReleaseCommitAndTag(version) {
   const dirty = gitPorcelain();
   if (dirty) {
-    // 允许仅包含我们即将提交的四个文件；若还有其它脏文件则拒绝
+    // 允许仅包含即将提交的版本相关文件；其它脏文件则拒绝
     const lines = dirty.split(/\r?\n/).filter(Boolean);
-    const allowed = new Set([
-      "package.json",
-      "package-lock.json",
-      "src-tauri/tauri.conf.json",
-      "src-tauri/Cargo.toml",
-    ]);
-    const extra = lines.filter((line) => {
-      const path = line.slice(3).replace(/\\/g, "/");
-      // rename: "R  old -> new"
-      const normalized = path.includes(" -> ") ? path.split(" -> ").pop() : path;
-      return !allowed.has(normalized);
-    });
+    const allowed = new Set(RELEASE_FILES);
+    const extra = [];
+    for (const line of lines) {
+      const path = porcelainPath(line);
+      if (!path || !allowed.has(path)) {
+        extra.push(path ?? line);
+      }
+    }
     if (extra.length > 0) {
       console.error("工作区有未提交改动，无法使用 --tag：");
       console.error(extra.join("\n"));
+      console.error("请先提交其它改动，或只留下版本相关文件后再试。");
       process.exit(1);
     }
   }
 
-  const files = [
-    "package.json",
-    "package-lock.json",
-    "src-tauri/tauri.conf.json",
-    "src-tauri/Cargo.toml",
-  ];
-  execFileSync("git", ["add", ...files], { cwd: root, stdio: "inherit" });
+  execFileSync("git", ["add", ...RELEASE_FILES], { cwd: root, stdio: "inherit" });
   const staged = execSync("git diff --cached --name-only", {
     cwd: root,
     encoding: "utf8",
