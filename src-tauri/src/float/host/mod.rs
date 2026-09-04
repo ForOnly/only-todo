@@ -227,6 +227,11 @@ impl FloatHost {
                 CompanionSurface::Chrome => {
                     if let Some(value) = inside {
                         cluster.chrome_inside = value;
+                        // 指针离开条：解除主窗退化后的 Preview 抑制
+                        if !value {
+                            cluster.suppress_hover_preview = false;
+                            cluster.suppress_gen = cluster.suppress_gen.wrapping_add(1);
+                        }
                     }
                 }
                 CompanionSurface::Body => {
@@ -364,6 +369,68 @@ impl FloatHost {
         }
         persist_chrome_ball(app)
     }
+
+    /// 唤出主窗前：钉住面板 / Docked Preview 形态退化（回球或留条）。幂等；至多一次 apply。
+    pub fn collapse_panel_for_main(app: &AppHandle) -> Result<(), AppError> {
+        let state = app_state(app)?;
+        let db = &state.db;
+        let placement = SettingsRepository::get_placement(db)?;
+        let home = SettingsRepository::get_home_shape(db)?;
+        let (visibility, panel_mode) = {
+            let host = host_state(app)?;
+            let rt = lock_runtime(&host)?;
+            (rt.visibility, rt.panel_mode)
+        };
+        if visibility != CompanionVisibility::Shown {
+            return Ok(());
+        }
+        let needs_degrade = match placement {
+            CompanionPlacement::Docked => panel_mode != PanelMode::Closed,
+            CompanionPlacement::Free => panel_mode == PanelMode::Pinned,
+        };
+        if !needs_degrade {
+            return Ok(());
+        }
+
+        cancel_cluster_timers(app);
+        {
+            let host = host_state(app)?;
+            host.focus_body_once.store(false, Ordering::SeqCst);
+        }
+
+        // 悬停 Preview 仅贴边有效：Docked 收条，或面板家退化成条后，才抑制回弹
+        let arm_preview_suppress = match placement {
+            CompanionPlacement::Docked => true,
+            CompanionPlacement::Free => home == HomeShape::Panel,
+        };
+
+        match placement {
+            CompanionPlacement::Docked => {
+                let host = host_state(app)?;
+                lock_runtime(&host)?.panel_mode = PanelMode::Closed;
+            }
+            CompanionPlacement::Free => match home {
+                HomeShape::Ball => {
+                    close_ball_temp_panel(app)?;
+                }
+                // 与 × 同语义：面板家自由态收成贴边条（只写状态，外层一次 apply）
+                HomeShape::Panel => {
+                    persist_body_bounds(app).ok();
+                    dock_from_body_minimize(app)?;
+                    let host = host_state(app)?;
+                    let mut rt = lock_runtime(&host)?;
+                    rt.visibility = CompanionVisibility::Shown;
+                    rt.panel_mode = PanelMode::Closed;
+                    rt.temp_body_bounds = None;
+                }
+            },
+        }
+        if arm_preview_suppress {
+            arm_suppress_hover_preview(app);
+        }
+        apply_and_emit(app)?;
+        Ok(())
+    }
 }
 
 fn cancel_cluster_timers(app: &AppHandle) {
@@ -375,6 +442,34 @@ fn cancel_cluster_timers(app: &AppHandle) {
     }
 }
 
+/// 退化后抑制悬停 Preview：清 chrome_inside、置 suppress，约 500ms 或指针离开后解除。
+fn arm_suppress_hover_preview(app: &AppHandle) {
+    let Ok(host) = host_state(app) else {
+        return;
+    };
+    let gen = {
+        let Ok(mut cluster) = host.cluster.lock() else {
+            return;
+        };
+        cluster.chrome_inside = false;
+        cluster.suppress_hover_preview = true;
+        cluster.suppress_gen = cluster.suppress_gen.wrapping_add(1);
+        cluster.suppress_gen
+    };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let Ok(host) = host_state(&app) else {
+            return;
+        };
+        if let Ok(mut cluster) = host.cluster.lock() {
+            if cluster.suppress_gen == gen {
+                cluster.suppress_hover_preview = false;
+            }
+        };
+    });
+}
+
 fn schedule_preview(app: AppHandle) {
     let Ok(host) = host_state(&app) else {
         return;
@@ -383,6 +478,9 @@ fn schedule_preview(app: AppHandle) {
         let Ok(mut cluster) = host.cluster.lock() else {
             return;
         };
+        if cluster.suppress_hover_preview {
+            return;
+        }
         cluster.unpreview_gen = cluster.unpreview_gen.wrapping_add(1);
         cluster.preview_gen = cluster.preview_gen.wrapping_add(1);
         cluster.preview_gen
@@ -395,7 +493,11 @@ fn schedule_preview(app: AppHandle) {
         let still = host
             .cluster
             .lock()
-            .map(|cluster| cluster.preview_gen == gen && cluster.chrome_inside)
+            .map(|cluster| {
+                cluster.preview_gen == gen
+                    && cluster.chrome_inside
+                    && !cluster.suppress_hover_preview
+            })
             .unwrap_or(false);
         if !still {
             return;

@@ -94,8 +94,14 @@ pub fn companion_open_view(app: AppHandle, view: BodyView) -> Result<CompanionSe
     FloatHost::open_view(&app, view)
 }
 
-/// 通知点击与托盘共用的主窗口显示逻辑。
+/// 通知点击与托盘共用的主窗口显示逻辑（主窗优先：先退化助理钉住面板）。
 pub fn show_main_window_impl(app: AppHandle, todo_id: Option<String>) -> Result<(), AppError> {
+    // F1：先完成面板退化（0 或 1 次 apply），再 show/focus 主窗一次。
+    // 退化失败不阻断出主窗（打 warn），避免单实例/通知路径整段失败。
+    if let Err(error) = FloatHost::collapse_panel_for_main(&app) {
+        tracing::warn!(error = %error, "collapse_panel_for_main failed");
+    }
+
     if let Some(window) = app.get_webview_window("main") {
         window.show().map_err(|error| AppError::InternalError {
             message: error.to_string(),
@@ -114,7 +120,7 @@ pub fn show_main_window_impl(app: AppHandle, todo_id: Option<String>) -> Result<
     Ok(())
 }
 
-/// 托盘左键：显隐主窗口（与助理无关）。
+/// 托盘左键：显隐主窗口。显示时会退化助理钉住面板（球/条可留）。
 /// 可见（含系统最小化）→ `hide()` 收入托盘；已隐藏 → show/unminimize/focus。
 pub fn toggle_main_window_impl(app: &AppHandle) -> Result<(), AppError> {
     let Some(window) = app.get_webview_window("main") else {

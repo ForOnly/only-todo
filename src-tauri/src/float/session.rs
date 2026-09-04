@@ -19,6 +19,10 @@ pub(crate) struct ClusterState {
     pub(crate) hold_preview: bool,
     pub(crate) preview_gen: u64,
     pub(crate) unpreview_gen: u64,
+    /// 主窗唤出导致面板退化后抑制悬停 Preview，避免条上指针未动就回弹
+    pub(crate) suppress_hover_preview: bool,
+    /// 与短时解除 suppress 的定时器代际对齐
+    pub(crate) suppress_gen: u64,
 }
 
 pub(crate) struct RuntimeState {
@@ -57,6 +61,8 @@ impl FloatHost {
                 hold_preview: false,
                 preview_gen: 0,
                 unpreview_gen: 0,
+                suppress_hover_preview: false,
+                suppress_gen: 0,
             }),
             runtime: Mutex::new(RuntimeState {
                 visibility: CompanionVisibility::Hidden,

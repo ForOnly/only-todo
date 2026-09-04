@@ -54,10 +54,9 @@ pub fn run() {
     tauri::Builder::default()
         // 单实例须最先注册，避免其它插件干扰
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
+            // 与托盘/通知一致：先退化助理钉住面板再聚焦主窗
+            if let Err(error) = commands::window::show_main_window_impl(app.clone(), None) {
+                tracing::warn!(error = %error, "single-instance show_main_window failed");
             }
         }))
         .plugin(tauri_plugin_process::init())
