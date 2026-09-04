@@ -324,7 +324,7 @@ impl TodoRepository {
 
     pub fn list(db: &Database, query: &ListTodoQuery) -> Result<PaginatedResponse<Todo>, AppError> {
         db.with_conn(|conn| {
-            let (items, total) = list_on(conn, query, true)?;
+            let (items, total) = list_on(conn, query)?;
             Ok(PaginatedResponse {
                 items,
                 total,
@@ -333,23 +333,12 @@ impl TodoRepository {
             })
         })
     }
-
-    /// 列表项（无 COUNT）；供焦点台在同一连接内多次查询。
-    pub(crate) fn list_items_on(
-        conn: &Connection,
-        query: &ListTodoQuery,
-    ) -> Result<Vec<Todo>, AppError> {
-        let (items, _) = list_on(conn, query, false)?;
-        Ok(items)
-    }
 }
 
-/// 列表查询；`with_total` 为 false 时跳过 COUNT（total 固定 0）。
-/// 列表 SELECT 用空 description，减 IPC 体积；详情仍走 get_by_id。
+/// 列表查询。列表 SELECT 用空 description，减 IPC 体积；详情仍走 get_by_id。
 fn list_on(
     conn: &Connection,
     query: &ListTodoQuery,
-    with_total: bool,
 ) -> Result<(Vec<Todo>, u64), AppError> {
     let mut conditions: Vec<String> = Vec::new();
     let mut bind_values: Vec<String> = Vec::new();
@@ -417,7 +406,7 @@ fn list_on(
     let order_clause = build_order_clause(&query.sort_by, &query.sort_order);
     let offset = (query.page.saturating_sub(1) as u64) * query.page_size as u64;
 
-    let total = if with_total {
+    let total = {
         let count_sql = format!("SELECT COUNT(*) FROM todos WHERE {where_clause}");
         let mut count_stmt = conn
             .prepare(&count_sql)
@@ -431,8 +420,6 @@ fn list_on(
             .map_err(|error| AppError::DbError {
                 message: error.to_string(),
             })?
-    } else {
-        0
     };
 
     let list_sql = format!(

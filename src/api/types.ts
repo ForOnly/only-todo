@@ -14,9 +14,7 @@ export type {
   AppearanceDto,
   ColorScheme,
   EventDto,
-  FocusBoardDto,
   HomeShape,
-  ListFocusBoardQuery,
   PaginatedTodos,
   PanelMode,
   Priority,
@@ -77,7 +75,6 @@ export type ListWorkbenchQuery = {
   page?: number;
   pageSize?: number;
 };
-export type MainMode = "focus" | "library";
 export type CreateReminderDto = GeneratedCreateReminderDto;
 export type UpdateReminderDto = { id: string } & Partial<{
   remindAt: string;

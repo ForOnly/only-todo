@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import AppButton from "@/components/common/AppButton.vue";
-import type { MainMode } from "@/api/types";
 
 defineProps<{
   keyword: string;
-  mode: MainMode;
 }>();
 
 const emit = defineEmits<{
   "update:keyword": [value: string];
-  "update:mode": [value: MainMode];
   search: [];
   clearSearch: [];
   settings: [];
@@ -18,28 +15,6 @@ const emit = defineEmits<{
 
 <template>
   <header class="header">
-    <div class="modes" role="tablist" :aria-label="$t('modes.aria')">
-      <button
-        type="button"
-        role="tab"
-        class="mode"
-        :class="{ active: mode === 'focus' }"
-        :aria-selected="mode === 'focus'"
-        @click="emit('update:mode', 'focus')"
-      >
-        {{ $t("modes.focus") }}
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="mode"
-        :class="{ active: mode === 'library' }"
-        :aria-selected="mode === 'library'"
-        @click="emit('update:mode', 'library')"
-      >
-        {{ $t("modes.library") }}
-      </button>
-    </div>
     <div class="actions">
       <div class="search-wrap">
         <input
@@ -74,38 +49,6 @@ const emit = defineEmits<{
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
-}
-
-.modes {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
-}
-
-.mode {
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.mode.active {
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: var(--shadow-sm);
-}
-
-.mode:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
 }
 
 .actions {

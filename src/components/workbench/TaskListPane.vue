@@ -6,13 +6,12 @@ import AppButton from "@/components/common/AppButton.vue";
 import AppSelect from "@/components/common/AppSelect.vue";
 import AppTagChip from "@/components/common/AppTagChip.vue";
 import TaskPeekPanel from "@/components/workbench/TaskPeekPanel.vue";
-import type { FocusBoardDto, SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
+import type { SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
 import { formatRelativeAge, formatRelativeDue, getOverdueDaysOnly } from "@/utils/timeMeta";
 import { sortKeysForView } from "@/utils/listSort";
 
 const props = defineProps<{
   todos: TodoDto[];
-  focusBoard: FocusBoardDto;
   selectedId: string | null;
   loading: boolean;
   total: number;
@@ -22,7 +21,6 @@ const props = defineProps<{
   activeTag: string | null;
   sortBy: SortBy;
   sortOrder: SortOrder;
-  grouped: boolean;
   searching: boolean;
   showInlineAdd: boolean;
   inlinePlaceholder: string;
@@ -80,12 +78,6 @@ onUnmounted(() => {
   }
 });
 
-interface ListGroup {
-  id: string;
-  title: string | null;
-  items: TodoDto[];
-}
-
 const sortOptions = computed(() => sortKeysForView(props.view));
 
 const sortSelectOptions = computed(() =>
@@ -110,8 +102,6 @@ const emptyCopy = computed(() => {
     return { title: t("list.empty.searchTitle"), hint: t("list.empty.searchHint") };
   }
   switch (props.view) {
-    case "today":
-      return { title: t("list.empty.focusTitle"), hint: t("list.empty.focusHint") };
     case "trash":
       return { title: t("list.empty.trashTitle"), hint: t("list.empty.trashHint") };
     case "archived":
@@ -124,20 +114,6 @@ const emptyCopy = computed(() => {
         hint: t("list.empty.defaultHint"),
       };
   }
-});
-
-const groups = computed<ListGroup[]>(() => {
-  if (props.todos.length === 0) return [];
-
-  if (props.grouped && !props.searching) {
-    return [
-      { id: "overdue", title: t("focus.overdue"), items: props.focusBoard.overdue },
-      { id: "doing", title: t("focus.doing"), items: props.focusBoard.doing },
-      { id: "dueToday", title: t("focus.dueToday"), items: props.focusBoard.dueToday },
-    ].filter((group) => group.items.length > 0);
-  }
-
-  return [{ id: "flat", title: null, items: props.todos }];
 });
 
 const showLoadingHint = computed(() => props.loading && props.todos.length === 0);
@@ -244,23 +220,20 @@ function submitQuickAdd() {
         />
       </li>
 
-      <li v-if="groups.length === 0" class="empty">
+      <li v-if="todos.length === 0" class="empty">
         <p class="empty-title">{{ emptyCopy.title }}</p>
         <p class="empty-hint">{{ emptyCopy.hint }}</p>
       </li>
 
-      <template v-for="group in groups" :key="group.id">
-        <li v-if="group.title" class="group-head" :data-group="group.id">{{ group.title }}</li>
-        <li
-          v-for="todo in group.items"
-          :key="todo.id"
-          class="todo-item"
-          :class="{
-            active: todo.id === selectedId,
-            done: todo.status === 'Done',
-            'overdue-row': group.id === 'overdue',
-          }"
-        >
+      <li
+        v-for="todo in todos"
+        :key="todo.id"
+        class="todo-item"
+        :class="{
+          active: todo.id === selectedId,
+          done: todo.status === 'Done',
+        }"
+      >
           <span class="priority-bar" :data-priority="todo.priority" />
           <div
             class="todo-row"
@@ -281,7 +254,7 @@ function submitQuickAdd() {
                 <div class="title-row">
                   <span class="title">{{ todo.title }}</span>
                   <span v-if="todo.status === 'Doing'" class="doing-mark">{{
-                    $t("views.doing")
+                    $t("status.Doing")
                   }}</span>
                 </div>
                 <div class="meta-right">
@@ -314,7 +287,6 @@ function submitQuickAdd() {
             </div>
           </div>
         </li>
-      </template>
     </ul>
 
     <footer v-if="showPagination" class="pagination">
@@ -414,30 +386,6 @@ function submitQuickAdd() {
 
 .todo-list.refreshing {
   opacity: 0.72;
-}
-
-.group-head {
-  padding: 12px 16px 6px;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  color: var(--color-muted);
-}
-
-.group-head[data-group="overdue"] {
-  color: var(--color-overdue);
-}
-
-.group-head[data-group="doing"] {
-  color: var(--color-accent);
-}
-
-.todo-item.overdue-row {
-  background: rgba(185, 28, 28, 0.04);
-}
-
-.todo-item.overdue-row:hover {
-  background: rgba(185, 28, 28, 0.08);
 }
 
 .quick-add {

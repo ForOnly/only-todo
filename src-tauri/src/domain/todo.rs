@@ -94,9 +94,6 @@ pub struct UpdateTodoDto {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum WorkbenchView {
-    Today,
-    Overdue,
-    Doing,
     All,
     Done,
     Archived,
@@ -107,9 +104,6 @@ pub enum WorkbenchView {
 impl WorkbenchView {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Today => "today",
-            Self::Overdue => "overdue",
-            Self::Doing => "doing",
             Self::All => "all",
             Self::Done => "done",
             Self::Archived => "archived",
@@ -118,7 +112,7 @@ impl WorkbenchView {
         }
     }
 
-    /// settings `list.default_view`：非法、tag、以及已撤出顶层的 doing/overdue → Today（焦点台）
+    /// settings `list.default_view`：非法、tag、以及已废弃的 today/doing/overdue → All
     #[allow(clippy::should_implement_trait)]
     pub fn from_settings_str(value: &str) -> Self {
         match value {
@@ -126,37 +120,17 @@ impl WorkbenchView {
             "done" => Self::Done,
             "archived" => Self::Archived,
             "trash" => Self::Trash,
-            "today" => Self::Today,
-            _ => Self::Today,
+            _ => Self::All,
         }
     }
 
-    /// 可作为启动默认落点：焦点台或库内归类（排除标签与已撤出的顶层视图）
+    /// 可作为启动默认落点（排除标签）
     pub fn is_default_view_candidate(self) -> bool {
         matches!(
             self,
-            Self::Today | Self::All | Self::Done | Self::Archived | Self::Trash
+            Self::All | Self::Done | Self::Archived | Self::Trash
         )
     }
-}
-
-#[derive(Debug, Clone, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export, rename_all = "camelCase")]
-pub struct ListFocusBoardQuery {
-    #[serde(default = "default_sort_by")]
-    pub sort_by: String,
-    #[serde(default = "default_sort_order")]
-    pub sort_order: String,
-}
-
-#[derive(Debug, Clone, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export, rename_all = "camelCase")]
-pub struct FocusBoardDto {
-    pub overdue: Vec<TodoDto>,
-    pub doing: Vec<TodoDto>,
-    pub due_today: Vec<TodoDto>,
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]

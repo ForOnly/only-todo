@@ -21,7 +21,7 @@ impl SettingsRepository {
             .unwrap_or_else(|| r#"{"sort_by":"priority","sort_order":"desc"}"#.into());
         let list_default_view = Self::get_value_on(conn, "list.default_view")?
             .map(|v| WorkbenchView::from_settings_str(&v))
-            .unwrap_or(WorkbenchView::Today);
+            .unwrap_or(WorkbenchView::All);
         let float_always_on_top =
             Self::get_bool_on(conn, "companion.always_on_top")?.unwrap_or(true);
         let float_visible_count = Self::get_u32_on(conn, "companion.visible_count")?.unwrap_or(5);
@@ -67,11 +67,11 @@ impl SettingsRepository {
                 Self::set_value_on(conn, "list.default_sort", sort)?;
             }
             if let Some(view) = dto.list_default_view {
-                // Tag 等非候选与 from_settings_str 一致：回落 Today 再写入
+                // Tag 等非候选与 from_settings_str 一致：回落 All 再写入
                 let persisted = if view.is_default_view_candidate() {
                     view
                 } else {
-                    WorkbenchView::Today
+                    WorkbenchView::All
                 };
                 Self::set_value_on(conn, "list.default_view", persisted.as_str())?;
             }

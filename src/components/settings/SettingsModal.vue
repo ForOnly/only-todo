@@ -108,7 +108,7 @@ const localeOptions = computed(() => [
 const viewOptions = computed(() =>
   DEFAULT_VIEW_OPTIONS.map((id) => ({
     value: id,
-    label: id === "today" ? t("modes.focus") : t(`views.${id}`),
+    label: t(`views.${id}`),
   })),
 );
 const sortByOptions = computed(() => [

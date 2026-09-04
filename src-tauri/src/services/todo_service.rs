@@ -4,8 +4,8 @@ use crate::domain::{
     priority::Priority,
     status::{StatusActionDto, TodoStatus},
     todo::{
-        CreateTodoDto, FocusBoardDto, ListFocusBoardQuery, ListTodoQuery, ListWorkbenchQuery,
-        PaginatedResponse, TodoDto, UpdateTodoDto, WorkbenchView,
+        CreateTodoDto, ListTodoQuery, ListWorkbenchQuery, PaginatedResponse, TodoDto, UpdateTodoDto,
+        WorkbenchView,
     },
 };
 use crate::errors::AppError;
@@ -20,7 +20,6 @@ const MAX_DESCRIPTION_LEN: usize = 5000;
 const MAX_PAGE_SIZE: u32 = 200;
 const MAX_TAGS: usize = 10;
 const MAX_TAG_LEN: usize = 30;
-const TODAY_FETCH_LIMIT: u32 = 100;
 
 pub struct TodoService;
 
@@ -110,60 +109,6 @@ impl TodoService {
         let keyword = query.keyword.filter(|k| !k.trim().is_empty());
 
         match query.view {
-            WorkbenchView::Today => {
-                let board = Self::list_focus_board(
-                    db,
-                    ListFocusBoardQuery {
-                        sort_by: query.sort_by,
-                        sort_order: query.sort_order,
-                    },
-                )?;
-                let items: Vec<TodoDto> = board
-                    .overdue
-                    .into_iter()
-                    .chain(board.doing)
-                    .chain(board.due_today)
-                    .collect();
-                let total = items.len() as u64;
-                Ok(PaginatedResponse {
-                    items,
-                    total,
-                    page: 1,
-                    page_size: TODAY_FETCH_LIMIT,
-                })
-            }
-            WorkbenchView::Overdue => {
-                let start = Utc::now()
-                    .date_naive()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_utc();
-                Self::list(
-                    db,
-                    ListTodoQuery {
-                        status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
-                        due_date_before: Some(start.to_rfc3339()),
-                        keyword,
-                        sort_by: query.sort_by,
-                        sort_order: query.sort_order,
-                        page,
-                        page_size,
-                        ..Default::default()
-                    },
-                )
-            }
-            WorkbenchView::Doing => Self::list(
-                db,
-                ListTodoQuery {
-                    status: Some(vec![TodoStatus::Doing]),
-                    keyword,
-                    sort_by: query.sort_by,
-                    sort_order: query.sort_order,
-                    page,
-                    page_size,
-                    ..Default::default()
-                },
-            ),
             WorkbenchView::All => Self::list(
                 db,
                 ListTodoQuery {
@@ -228,75 +173,6 @@ impl TodoService {
                 },
             ),
         }
-    }
-
-    /// 焦点台：逾期 / 进行中（未逾期）/ 今日到期（仅 Todo），三组互斥。
-    /// 单次持锁、三次 SELECT（无 COUNT）。
-    pub fn list_focus_board(
-        db: &Database,
-        query: ListFocusBoardQuery,
-    ) -> Result<FocusBoardDto, AppError> {
-        let now = Utc::now();
-        let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let end = start + Duration::days(1);
-        let sort_by = if query.sort_by.trim().is_empty() {
-            "priority".to_string()
-        } else {
-            query.sort_by
-        };
-        let sort_order = if query.sort_order.trim().is_empty() {
-            "desc".to_string()
-        } else {
-            query.sort_order
-        };
-
-        let overdue_q = ListTodoQuery {
-            status: Some(vec![TodoStatus::Todo, TodoStatus::Doing]),
-            due_date_before: Some(start.to_rfc3339()),
-            sort_by: sort_by.clone(),
-            sort_order: sort_order.clone(),
-            page: 1,
-            page_size: TODAY_FETCH_LIMIT,
-            ..Default::default()
-        };
-        let doing_q = ListTodoQuery {
-            status: Some(vec![TodoStatus::Doing]),
-            sort_by: sort_by.clone(),
-            sort_order: sort_order.clone(),
-            page: 1,
-            page_size: TODAY_FETCH_LIMIT,
-            ..Default::default()
-        };
-        let due_today_q = ListTodoQuery {
-            status: Some(vec![TodoStatus::Todo]),
-            due_date_after: Some(start.to_rfc3339()),
-            due_date_before: Some(end.to_rfc3339()),
-            sort_by,
-            sort_order,
-            page: 1,
-            page_size: TODAY_FETCH_LIMIT,
-            ..Default::default()
-        };
-
-        db.with_conn(|conn| {
-            let overdue_items = TodoRepository::list_items_on(conn, &overdue_q)?;
-            let doing_all = TodoRepository::list_items_on(conn, &doing_q)?;
-            let due_today_items = TodoRepository::list_items_on(conn, &due_today_q)?;
-
-            let overdue_ids: std::collections::HashSet<String> =
-                overdue_items.iter().map(|todo| todo.id.clone()).collect();
-            let doing = doing_all
-                .into_iter()
-                .filter(|todo| !overdue_ids.contains(&todo.id))
-                .map(TodoDto::from)
-                .collect();
-
-            Ok(FocusBoardDto {
-                overdue: overdue_items.into_iter().map(TodoDto::from).collect(),
-                doing,
-                due_today: due_today_items.into_iter().map(TodoDto::from).collect(),
-            })
-        })
     }
 
     /// 主窗侧栏元数据：标签 + 最近活动，一次 IPC、单次持锁。
@@ -513,30 +389,48 @@ mod tests {
     }
 
     #[test]
-    fn focus_board_partitions_overdue_doing_due_today() {
-        let db = db();
-        let now = Utc::now();
-        let start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let yesterday = (start - Duration::days(1)).to_rfc3339();
-        let today_noon = (start + Duration::hours(12)).to_rfc3339();
+    fn from_settings_str_maps_legacy_views_to_all() {
+        assert_eq!(WorkbenchView::from_settings_str("all"), WorkbenchView::All);
+        assert_eq!(WorkbenchView::from_settings_str("done"), WorkbenchView::Done);
+        assert_eq!(
+            WorkbenchView::from_settings_str("archived"),
+            WorkbenchView::Archived
+        );
+        assert_eq!(
+            WorkbenchView::from_settings_str("trash"),
+            WorkbenchView::Trash
+        );
+        assert_eq!(WorkbenchView::from_settings_str("today"), WorkbenchView::All);
+        assert_eq!(WorkbenchView::from_settings_str("doing"), WorkbenchView::All);
+        assert_eq!(
+            WorkbenchView::from_settings_str("overdue"),
+            WorkbenchView::All
+        );
+        assert_eq!(WorkbenchView::from_settings_str("tag"), WorkbenchView::All);
+        assert_eq!(
+            WorkbenchView::from_settings_str("nonsense"),
+            WorkbenchView::All
+        );
+    }
 
-        let overdue = TodoService::create(
+    #[test]
+    fn list_workbench_all_includes_active_without_due() {
+        let db = db();
+        let with_due = TodoService::create(
             &db,
             CreateTodoDto {
-                title: "overdue".into(),
+                title: "has-due".into(),
                 description: None,
                 priority: None,
-                due_date: Some(yesterday),
+                due_date: Some(Utc::now().to_rfc3339()),
                 tags: None,
             },
         )
         .unwrap();
-        TodoService::transition(&db, &overdue.id, TodoStatus::Doing).unwrap();
-
-        let doing = TodoService::create(
+        let no_due = TodoService::create(
             &db,
             CreateTodoDto {
-                title: "doing".into(),
+                title: "no-due".into(),
                 description: None,
                 priority: None,
                 due_date: None,
@@ -544,33 +438,26 @@ mod tests {
             },
         )
         .unwrap();
-        TodoService::transition(&db, &doing.id, TodoStatus::Doing).unwrap();
+        TodoService::transition(&db, &no_due.id, TodoStatus::Doing).unwrap();
 
-        let due_today = TodoService::create(
+        let listed = TodoService::list_workbench(
             &db,
-            CreateTodoDto {
-                title: "due-today".into(),
-                description: None,
-                priority: None,
-                due_date: Some(today_noon),
-                tags: None,
-            },
-        )
-        .unwrap();
-
-        let board = TodoService::list_focus_board(
-            &db,
-            ListFocusBoardQuery {
+            ListWorkbenchQuery {
+                view: WorkbenchView::All,
+                tag: None,
+                keyword: None,
                 sort_by: "priority".into(),
                 sort_order: "desc".into(),
+                page: 1,
+                page_size: 50,
             },
         )
         .unwrap();
 
-        assert!(board.overdue.iter().any(|t| t.id == overdue.id));
-        assert!(board.doing.iter().any(|t| t.id == doing.id));
-        assert!(!board.doing.iter().any(|t| t.id == overdue.id));
-        assert!(board.due_today.iter().any(|t| t.id == due_today.id));
+        assert!(listed.items.iter().any(|t| t.id == with_due.id));
+        assert!(listed.items.iter().any(|t| t.id == no_due.id));
+        assert_eq!(listed.page, 1);
+        assert_eq!(listed.page_size, 50);
     }
 
     #[test]

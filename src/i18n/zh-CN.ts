@@ -20,16 +20,6 @@ export default {
     clearSearch: "清除搜索",
     settings: "设置",
   },
-  modes: {
-    aria: "主窗模式",
-    focus: "今天",
-    library: "库",
-  },
-  focus: {
-    overdue: "逾期",
-    doing: "进行中",
-    dueToday: "今日到期",
-  },
   planner: {
     aria: "时间规划",
     title: "规划",
@@ -58,9 +48,6 @@ export default {
   },
   views: {
     navLabel: "视图",
-    today: "今日",
-    overdue: "逾期",
-    doing: "进行中",
     all: "全部",
     done: "已完成",
     archived: "归档",
@@ -82,11 +69,8 @@ export default {
     viewAll: "查看全部",
     moreTags: "+{n}",
     searchTitle: "搜索结果",
-    inlineAddFocus: "添加今日任务，Enter 保存",
-    inlineAddLibrary: "添加任务，Enter 保存",
+    inlineAdd: "添加任务，Enter 保存",
     empty: {
-      focusTitle: "今天没有要做的事",
-      focusHint: "在上方输入添加今日任务，或到库里查看全部。",
       searchTitle: "没有匹配的任务",
       searchHint: "试试别的关键字，或清除搜索。",
       trashTitle: "回收站为空",

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkbenchView } from "@/api/types";
-import { LIBRARY_FOOTER_VIEWS, LIBRARY_MAIN_VIEWS } from "@/constants/workbenchViews";
+import { SIDEBAR_FOOTER_VIEWS, SIDEBAR_MAIN_VIEWS } from "@/constants/workbenchViews";
 
 const props = defineProps<{
   view: WorkbenchView;
@@ -26,7 +26,7 @@ function isTagActive(tag: string): boolean {
     <div class="sidebar-scroll">
       <nav class="nav">
         <button
-          v-for="id in LIBRARY_MAIN_VIEWS"
+          v-for="id in SIDEBAR_MAIN_VIEWS"
           :key="id"
           type="button"
           class="nav-item"
@@ -55,7 +55,7 @@ function isTagActive(tag: string): boolean {
 
     <nav class="nav nav-footer">
       <button
-        v-for="id in LIBRARY_FOOTER_VIEWS"
+        v-for="id in SIDEBAR_FOOTER_VIEWS"
         :key="id"
         type="button"
         class="nav-item"

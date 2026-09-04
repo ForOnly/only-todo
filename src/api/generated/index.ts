@@ -7,8 +7,6 @@ export type { CreateTodoDto } from "./CreateTodoDto";
 export type { UpdateTodoDto } from "./UpdateTodoDto";
 export type { ListTodoQuery } from "./ListTodoQuery";
 export type { ListWorkbenchQuery } from "./ListWorkbenchQuery";
-export type { ListFocusBoardQuery } from "./ListFocusBoardQuery";
-export type { FocusBoardDto } from "./FocusBoardDto";
 export type { WorkbenchMetaDto } from "./WorkbenchMetaDto";
 export type { WorkbenchView } from "./WorkbenchView";
 export type { PaginatedTodos } from "./PaginatedTodos";

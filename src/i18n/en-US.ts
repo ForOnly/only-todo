@@ -20,16 +20,6 @@ export default {
     clearSearch: "Clear search",
     settings: "Settings",
   },
-  modes: {
-    aria: "Main window mode",
-    focus: "Today",
-    library: "Library",
-  },
-  focus: {
-    overdue: "Overdue",
-    doing: "In progress",
-    dueToday: "Due today",
-  },
   planner: {
     aria: "Time planner",
     title: "Planner",
@@ -58,9 +48,6 @@ export default {
   },
   views: {
     navLabel: "Views",
-    today: "Today",
-    overdue: "Overdue",
-    doing: "In progress",
     all: "All",
     done: "Done",
     archived: "Archived",
@@ -82,11 +69,8 @@ export default {
     viewAll: "View all",
     moreTags: "+{n}",
     searchTitle: "Search results",
-    inlineAddFocus: "Add a task for today, Enter to save",
-    inlineAddLibrary: "Add a task, Enter to save",
+    inlineAdd: "Add a task, Enter to save",
     empty: {
-      focusTitle: "Nothing to do today",
-      focusHint: "Type above to add a task due today, or open the library.",
       searchTitle: "No matching tasks",
       searchHint: "Try another keyword, or clear the search.",
       trashTitle: "Trash is empty",

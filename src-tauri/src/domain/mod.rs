@@ -340,8 +340,6 @@ pub fn export_all_ts(out_dir: &std::path::Path) {
     crate::domain::todo::UpdateTodoDto::export_all().expect("export UpdateTodoDto");
     crate::domain::todo::ListTodoQuery::export_all().expect("export ListTodoQuery");
     crate::domain::todo::ListWorkbenchQuery::export_all().expect("export ListWorkbenchQuery");
-    crate::domain::todo::ListFocusBoardQuery::export_all().expect("export ListFocusBoardQuery");
-    crate::domain::todo::FocusBoardDto::export_all().expect("export FocusBoardDto");
     crate::domain::todo::PaginatedTodos::export_all().expect("export PaginatedTodos");
     crate::domain::reminder::ReminderDto::export_all().expect("export ReminderDto");
     crate::domain::reminder::CreateReminderDto::export_all().expect("export CreateReminderDto");
@@ -373,8 +371,6 @@ export type { CreateTodoDto } from "./CreateTodoDto";
 export type { UpdateTodoDto } from "./UpdateTodoDto";
 export type { ListTodoQuery } from "./ListTodoQuery";
 export type { ListWorkbenchQuery } from "./ListWorkbenchQuery";
-export type { ListFocusBoardQuery } from "./ListFocusBoardQuery";
-export type { FocusBoardDto } from "./FocusBoardDto";
 export type { WorkbenchMetaDto } from "./WorkbenchMetaDto";
 export type { WorkbenchView } from "./WorkbenchView";
 export type { PaginatedTodos } from "./PaginatedTodos";

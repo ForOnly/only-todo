@@ -20,7 +20,7 @@ export function startOfLocalDayMs(nowMs: number = Date.now()): number {
   return d.getTime();
 }
 
-/** UTC 今日 0 点，与后端 list_focus_board 的 date_naive()+00:00:00 UTC 一致 */
+/** UTC 今日 0 点，与后端 count_overdue / due_today 的 date_naive()+00:00:00 UTC 日界一致 */
 export function startOfUtcDayMs(nowMs: number = Date.now()): number {
   const d = new Date(nowMs);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());

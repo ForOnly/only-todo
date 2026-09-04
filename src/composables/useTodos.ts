@@ -1,27 +1,11 @@
 import { ref, type Ref } from "vue";
 
 import * as todoApi from "@/api/todos";
-import type {
-  CreateTodoDto,
-  FocusBoardDto,
-  MainMode,
-  SortBy,
-  SortOrder,
-  TodoDto,
-  WorkbenchView,
-} from "@/api/types";
-import { isLibraryView } from "@/constants/workbenchViews";
+import type { CreateTodoDto, SortBy, SortOrder, TodoDto, WorkbenchView } from "@/api/types";
 import { formatErrorMessage } from "@/utils/error";
-
-const EMPTY_FOCUS_BOARD: FocusBoardDto = {
-  overdue: [],
-  doing: [],
-  dueToday: [],
-};
 
 export interface UseTodosReturn {
   todos: Ref<TodoDto[]>;
-  focusBoard: Ref<FocusBoardDto>;
   total: Ref<number>;
   page: Ref<number>;
   pageSize: Ref<number>;
@@ -29,7 +13,6 @@ export interface UseTodosReturn {
   error: Ref<string | null>;
   keyword: Ref<string>;
   searchActive: Ref<boolean>;
-  mode: Ref<MainMode>;
   view: Ref<WorkbenchView>;
   activeTag: Ref<string | null>;
   sortBy: Ref<SortBy>;
@@ -38,7 +21,6 @@ export interface UseTodosReturn {
   fetchTodos: () => Promise<void>;
   createTodo: (dto: CreateTodoDto) => Promise<TodoDto>;
   selectTodo: (id: string | null) => Promise<void>;
-  setMode: (next: MainMode) => void;
   setView: (next: WorkbenchView, tag?: string | null) => void;
   setSort: (sortBy: SortBy, sortOrder?: SortOrder) => void;
   search: () => Promise<void>;
@@ -48,7 +30,6 @@ export interface UseTodosReturn {
 
 export function useTodos(): UseTodosReturn {
   const todos = ref<TodoDto[]>([]);
-  const focusBoard = ref<FocusBoardDto>({ ...EMPTY_FOCUS_BOARD });
   const total = ref(0);
   const page = ref(1);
   const pageSize = ref(50);
@@ -56,8 +37,7 @@ export function useTodos(): UseTodosReturn {
   const error = ref<string | null>(null);
   const keyword = ref("");
   const searchActive = ref(false);
-  const mode = ref<MainMode>("focus");
-  const view = ref<WorkbenchView>("today");
+  const view = ref<WorkbenchView>("all");
   const activeTag = ref<string | null>(null);
   const sortBy = ref<SortBy>("priority");
   const sortOrder = ref<SortOrder>("desc");
@@ -84,21 +64,6 @@ export function useTodos(): UseTodosReturn {
         todos.value = result.items;
         total.value = result.total;
         page.value = result.page;
-        focusBoard.value = { ...EMPTY_FOCUS_BOARD };
-        return;
-      }
-
-      if (mode.value === "focus") {
-        const board = await todoApi.listFocusBoard({
-          sortBy: sortBy.value,
-          sortOrder: sortOrder.value,
-        });
-        if (gen !== listGen) return;
-        focusBoard.value = board;
-        todos.value = [...board.overdue, ...board.doing, ...board.dueToday];
-        total.value = todos.value.length;
-        page.value = 1;
-        // 焦点台不写回 pageSize，避免切回库模式后分页被永久放大
         return;
       }
 
@@ -114,7 +79,6 @@ export function useTodos(): UseTodosReturn {
       todos.value = result.items;
       total.value = result.total;
       page.value = result.page;
-      focusBoard.value = { ...EMPTY_FOCUS_BOARD };
     } catch (err) {
       if (gen !== listGen) return;
       error.value = formatErrorMessage(err);
@@ -136,31 +100,12 @@ export function useTodos(): UseTodosReturn {
     selectedId.value = id;
   }
 
-  function setMode(next: MainMode): void {
-    mode.value = next;
-    searchActive.value = false;
-    keyword.value = "";
-    page.value = 1;
-    if (next === "library" && !isLibraryView(view.value)) {
-      view.value = "all";
-      activeTag.value = null;
-    }
-    if (next === "focus") {
-      view.value = "today";
-      activeTag.value = null;
-    }
-    void fetchTodos();
-  }
-
   function setView(next: WorkbenchView, tag: string | null = null): void {
     view.value = next;
     activeTag.value = next === "tag" ? tag : null;
     page.value = 1;
     searchActive.value = false;
     keyword.value = "";
-    if (isLibraryView(next)) {
-      mode.value = "library";
-    }
     void fetchTodos();
   }
 
@@ -194,7 +139,6 @@ export function useTodos(): UseTodosReturn {
 
   return {
     todos,
-    focusBoard,
     total,
     page,
     pageSize,
@@ -202,7 +146,6 @@ export function useTodos(): UseTodosReturn {
     error,
     keyword,
     searchActive,
-    mode,
     view,
     activeTag,
     sortBy,
@@ -211,7 +154,6 @@ export function useTodos(): UseTodosReturn {
     fetchTodos,
     createTodo,
     selectTodo,
-    setMode,
     setView,
     setSort,
     search,

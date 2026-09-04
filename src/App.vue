@@ -29,13 +29,12 @@ import TaskListPane from "@/components/workbench/TaskListPane.vue";
 import TaskInspector from "@/components/workbench/TaskInspector.vue";
 import ActivityStrip from "@/components/workbench/ActivityStrip.vue";
 import { TAURI_EVENTS } from "@/constants/events";
-import { coerceDefaultView, isLibraryView } from "@/constants/workbenchViews";
+import { coerceDefaultView } from "@/constants/workbenchViews";
 import { modalEscDepth } from "@/composables/useModalEscStack";
 import { useAppUpdater } from "@/composables/useAppUpdater";
 import { useReminders, useTodoDetail } from "@/composables/useTodoDetail";
 import { useTodos } from "@/composables/useTodos";
 import { applyAppearance } from "@/utils/appearance";
-import { fromLocalDatetimeInput, localTodayDueInput } from "@/utils/date";
 import { formatErrorMessage } from "@/utils/error";
 import { parseListDefaultSort } from "@/utils/listSort";
 
@@ -43,7 +42,6 @@ const { t } = useI18n();
 
 const {
   todos,
-  focusBoard,
   total,
   page,
   pageSize,
@@ -51,7 +49,6 @@ const {
   error: listError,
   keyword,
   searchActive,
-  mode,
   view,
   activeTag,
   sortBy,
@@ -60,7 +57,6 @@ const {
   fetchTodos,
   createTodo,
   selectTodo,
-  setMode,
   setView,
   setSort,
   search,
@@ -113,11 +109,10 @@ const settingsOpen = ref(false);
 const settingsError = ref<string | null>(null);
 const settingsSaving = ref(false);
 const createOpen = ref(false);
-/** 打开新建弹窗时可选预填截止日期（今日空态） */
 const createInitialDue = ref<string | null>(null);
 const notificationEnabled = ref(true);
 const listDefaultSortRaw = ref('{"sort_by":"priority","sort_order":"desc"}');
-const listDefaultView = ref<WorkbenchView>("today");
+const listDefaultView = ref<WorkbenchView>("all");
 const floatAlwaysOnTop = ref(true);
 const floatVisibleCount = ref(5);
 const floatAutoShow = ref(true);
@@ -134,7 +129,6 @@ const eventUnlisteners: (() => void)[] = [];
 
 const showQuickAdd = computed(() => {
   if (searchActive.value) return false;
-  if (mode.value === "focus") return true;
   return view.value === "all" || view.value === "tag";
 });
 
@@ -165,13 +159,7 @@ async function loadAndApplySettings() {
 function applyColdStartView() {
   const next = coerceDefaultView(listDefaultView.value);
   listDefaultView.value = next;
-  if (isLibraryView(next)) {
-    mode.value = "library";
-    view.value = next;
-  } else {
-    mode.value = "focus";
-    view.value = "today";
-  }
+  view.value = next;
   activeTag.value = null;
 }
 
@@ -345,7 +333,6 @@ async function navigateToTodo(id: string | null) {
   try {
     const todo = await getTodo(id);
     if (todo.deletedAt) {
-      mode.value = "library";
       view.value = "trash";
       activeTag.value = null;
       searchActive.value = false;
@@ -354,7 +341,6 @@ async function navigateToTodo(id: string | null) {
     } else if (!todos.value.some((item) => item.id === id)) {
       await fetchTodos();
       if (!todos.value.some((item) => item.id === id)) {
-        mode.value = "library";
         view.value = "all";
         activeTag.value = null;
         searchActive.value = false;
@@ -369,8 +355,8 @@ async function navigateToTodo(id: string | null) {
   await selectTodo(id);
 }
 
-function openCreateModal(opts?: { dueToday?: boolean }) {
-  createInitialDue.value = opts?.dueToday ? localTodayDueInput() : null;
+function openCreateModal() {
+  createInitialDue.value = null;
   createOpen.value = true;
 }
 
@@ -417,7 +403,6 @@ async function handleRestore() {
   const restoredId = editingId.value;
   const ok = await restore();
   if (ok && restoredId) {
-    mode.value = "library";
     view.value = "all";
     activeTag.value = null;
     searchActive.value = false;
@@ -437,7 +422,6 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
     createModalRef.value?.resetSubmitting();
     await loadTags();
     if (!todos.value.some((item) => item.id === created.id)) {
-      mode.value = "library";
       view.value = "all";
       activeTag.value = null;
       searchActive.value = false;
@@ -453,12 +437,7 @@ async function handleCreateSubmit(dto: CreateTodoDto) {
 
 async function handleQuickAdd(title: string) {
   try {
-    const dto: CreateTodoDto = { title };
-    if (mode.value === "focus") {
-      const due = fromLocalDatetimeInput(localTodayDueInput());
-      if (due) dto.dueDate = due;
-    }
-    await createTodo(dto);
+    await createTodo({ title });
     await loadTags();
   } catch (err) {
     listError.value = formatErrorMessage(err);
@@ -503,12 +482,6 @@ async function handleSnoozeReminder(id: string, minutes: number) {
   } catch (err) {
     reminderError.value = formatErrorMessage(err);
   }
-}
-
-async function handleModeChange(next: typeof mode.value) {
-  if (!(await closeDetail())) return;
-  selectedId.value = null;
-  setMode(next);
 }
 
 async function handleViewSelect(next: WorkbenchView, tag?: string | null) {
@@ -561,8 +534,6 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
   <div class="app">
     <AppHeader
       v-model:keyword="keyword"
-      :mode="mode"
-      @update:mode="handleModeChange"
       @search="search"
       @clear-search="clearSearch"
       @settings="
@@ -573,7 +544,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
 
     <div class="body">
       <ViewSidebar
-        v-if="mode === 'library' && !searchActive"
+        v-if="!searchActive"
         :view="view"
         :active-tag="activeTag"
         :all-tags="allTags"
@@ -584,7 +555,6 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
         <p v-if="listError" class="list-error">{{ listError }}</p>
         <TaskListPane
           :todos="todos"
-          :focus-board="focusBoard"
           :selected-id="selectedId"
           :loading="loading"
           :total="total"
@@ -594,12 +564,9 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
           :active-tag="activeTag"
           :sort-by="sortBy"
           :sort-order="sortOrder"
-          :grouped="mode === 'focus' && !searchActive"
           :searching="searchActive"
           :show-inline-add="showQuickAdd"
-          :inline-placeholder="
-            mode === 'focus' ? $t('list.inlineAddFocus') : $t('list.inlineAddLibrary')
-          "
+          :inline-placeholder="$t('list.inlineAdd')"
           @select="handleSelect"
           @toggle-complete="handleToggleComplete"
           @prev-page="goToPage(page - 1)"
@@ -639,7 +606,7 @@ async function handleSettingsUpdate(payload: Parameters<typeof updateSettings>[0
       </TaskEditDrawer>
     </div>
 
-    <ActivityStrip v-if="mode === 'library'" :events="recentEvents" />
+    <ActivityStrip v-if="!searchActive" :events="recentEvents" />
 
     <CreateTodoModal
       ref="createModalRef"

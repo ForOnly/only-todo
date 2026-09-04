@@ -53,6 +53,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 11,
         sql: include_str!("../../../migrations/011_list_default_view.sql"),
     },
+    Migration {
+        version: 12,
+        sql: include_str!("../../../migrations/012_default_view_all.sql"),
+    },
 ];
 
 fn current_version(conn: &Connection) -> Result<i32, AppError> {
